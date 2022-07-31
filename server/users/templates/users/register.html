@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+    <div class="d-flex flex-row justify-content-center">
+        <div class="">
+            {% if error %}
+                {% if username_unavailable %}
+                    <b> this username has been assigned before. please try another one </b>
+                {% elif duplicate_phone_number %}
+                    <b> this phone number has been used before. please try another one </b>
+                {% else %}
+                    <b> unexpected error occurred! </b>
+                {% endif %}
+            {% endif %}
+            <form class="d-flex flex-column justify-content-center" method="post">
+                <div class="d-flex flex-column justify-content-center">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                </div>
+                <button class="btn btn-outline-primary" type="submit" name="action">Register</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const lables = document.getElementsByTagName("lable");
+            for (let i = 0; i < lables.length; i++) {
+                lables[i].classList.add("hidden");
+            }
+            const first_name = document.getElementById("id_first_name");
+            first_name.classList.add("form-control");
+            first_name.placeholder = "First name";
+            const last_name = document.getElementById("id_last_name");
+            last_name.classList.add("form-control");
+            last_name.placeholder = "Last name";
+            const email = document.getElementById("id_email");
+            email.classList.add("form-control");
+            email.placeholder = "Email";
+            const username = document.getElementById("id_username");
+            username.classList.add("form-control");
+            username.placeholder = "Username";
+            const password = document.getElementById("id_password");
+            password.classList.add("form-control");
+            password.placeholder = "Password";
+            const phone_number = document.getElementById("id_phone_number");
+            phone_number.classList.add("form-control");
+            phone_number.placeholder = "Phone number";
+            const user_type = document.getElementById("id_user_type");
+            user_type.classList.add("form-select");
+        })();
+    </script>
+
+    <style>
+        .hidden {
+            display: none;
+        }
+    </style>
+{% endblock %}

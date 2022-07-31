@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+    <div class="d-flex flex-row justify-content-center">
+        <form class="d-flex flex-column justify-content-center" method="post">
+            <div class="">
+                {% csrf_token %}
+                {{ form.as_p }}
+            </div>
+            {% if error %}
+                <div id="error">
+                    {% if user_type_error %}
+                        this is customer login, login in admin panel
+                    {% elif login_error %}
+                        username or password is wrong
+                    {% endif %}
+                </div>
+            {% endif %}
+            <button class="btn btn-outline-primary" type="submit" name="action">Login</button>
+        </form>
+    </div>
+
+    <script>
+        (function () {
+            const lables = document.getElementsByTagName("lable");
+            for (let i = 0; i < lables.length; i++) {
+                lables[i].classList.add("hidden");
+            }
+            const username = document.getElementById("id_username");
+            username.classList.add("form-control");
+            username.placeholder = "Username";
+            const password = document.getElementById("id_password");
+            password.classList.add("form-control");
+            password.placeholder = "Password";
+        })();
+    </script>
+
+    <style>
+        .hidden {
+            display: none;
+        }
+    </style>
+{% endblock %}
