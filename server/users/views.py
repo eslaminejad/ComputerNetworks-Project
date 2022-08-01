@@ -57,7 +57,6 @@ class LoginFormView(FormView):
         password = form.cleaned_data['password']
         user = authenticate(self.request, username=username, password=password)
         if user is not None:
-            messages.success(self.request, "ورود با موفقیت انجام شد.")
             return redirect(self.success_url)
         else:
             return render(self.request, "users/login.html", {"error": True, "login_error": True})
