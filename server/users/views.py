@@ -3,9 +3,11 @@ from django.db.utils import IntegrityError
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.views.generic.edit import FormView
+from django.contrib import messages
 
 from users.forms import *
 from users.models import *
+
 
 
 def index(request):
@@ -42,7 +44,7 @@ class LoginFormView(FormView):
     template_name = 'users/login.html'
     form_class = LoginForm
     # TODO: this needs to change
-    success_url = 'something'
+    success_url = '../..'
 
     def get(self, request, *args, **kwargs):
         if self.request.GET.get('signed_up') == 'true':
@@ -55,6 +57,7 @@ class LoginFormView(FormView):
         password = form.cleaned_data['password']
         user = authenticate(self.request, username=username, password=password)
         if user is not None:
+            messages.success(self.request, "ورود با موفقیت انجام شد.")
             return redirect(self.success_url)
         else:
             return render(self.request, "users/login.html", {"error": True, "login_error": True})
