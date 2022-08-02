@@ -1,21 +1,26 @@
-import random
-import socket, threading
+import socket
+import threading
 
 host = '127.0.0.1'
 port = 8550
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.bind((host, port))
 server.listen(1)
+file_port = 8551
+file_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+file_server.bind((host, file_port))
+file_server.listen(2)
 print("server listening")
 
-users = {'ali':'123'}
+users = {'ali': '123'}
 
-class User():
+
+class User:
     username = ''
     password = ''
     logged_in = False
 
-    def register(self,inputusername, inputpassword):
+    def register(self, inputusername, inputpassword):
         if inputusername not in users:
             self.username = inputusername
             self.password = inputpassword
@@ -25,7 +30,7 @@ class User():
         else:
             return False
 
-    def login(self,inputusername, inputpassword):
+    def login(self, inputusername, inputpassword):
         if inputusername in users:
             if users[inputusername] == inputpassword:
                 self.username = inputusername
@@ -42,12 +47,13 @@ class User():
         else:
             return False
 
+
 class Video():
-    owner : str
-    likes : list
-    dislikes : list
-    comments : list
-    title : str
+    owner: str
+    likes: list
+    dislikes: list
+    comments: list
+    title: str
 
     def __init__(self, owner, title):
         self.owner = owner
@@ -56,21 +62,26 @@ class Video():
         self.dislikes = []
         self.comments = []
 
-    def upload(self, soc):
-        savefilename = 'data/'+self.title+'.mp4'
+    def upload(self):
+        soc, addr = file_server.accept()
+        print(f'client connect to upload file {addr}')
+        savefilename = 'data/' + self.title
         with soc, open(savefilename, 'wb') as file:
+            recvfile = soc.recv(4096)
             while True:
+                file.write(recvfile)
                 recvfile = soc.recv(4096)
-                print(recvfile)
-                if not recvfile: break
+                if not recvfile:
+                    break
                 file.write(recvfile)
         print("File has been received.")
 
-def handle_user(message,user):
+
+def handle_user(message, user):
     if message.split()[0] == 'register' and len(message.split()) == 3:
         inputusername = message.split()[1]
         inputpassword = message.split()[2]
-        register = user.register(inputusername,inputpassword)
+        register = user.register(inputusername, inputpassword)
         if register == True:
             return 'register successful'
         else:
@@ -79,7 +90,7 @@ def handle_user(message,user):
     elif message.split()[0] == 'login' and len(message.split()) == 3:
         inputusername = message.split()[1]
         inputpassword = message.split()[2]
-        login = user.login(inputusername,inputpassword)
+        login = user.login(inputusername, inputpassword)
         if login == True:
             return 'login successful'
         else:
@@ -99,15 +110,15 @@ def handle(client: socket.socket):
         try:
             message = client.recv(1024).decode('ascii')
             print(message)
-            if message.split()[0] in ['login','logout','register']:
-                result = handle_user(message,user, )
+            if message.split()[0] in ['login', 'logout', 'register']:
+                result = handle_user(message, user, )
                 client.send(result.encode('ascii'))
 
             elif message.split()[0] == 'upload':
-                if user.logged_in :
+                if user.logged_in:
                     title = message.split()[1]
                     video = Video(user.username, title)
-                    video.upload(client)
+                    video.upload()
                 else:
                     client.send('you need to login'.encode('ascii'))
 
@@ -116,7 +127,6 @@ def handle(client: socket.socket):
             print("err sv handle")
             client.close()
             break
-
 
 
 while True:

@@ -4,6 +4,8 @@ host = '127.0.0.1'
 port = 8550
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
+file_port = 8551
+
 # connect to webserver
 client.connect((host, port))
 print("connected to server")
@@ -16,14 +18,17 @@ def echo():
             command = message.split()[0]
             if command == 'upload':
                 filename = message.split()[2]
-                with open(filename, 'rb') as file:
-                    sendfile = file.read()
                 client.send(('upload ' + message.split()[1]).encode('ascii'))
-                client.sendall(sendfile)
+                file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                file_client.connect((host, file_port))
+                with file_client, open(filename, 'rb') as file:
+                    sendfile = file.read()
+                    file_client.sendall(sendfile)
                 print('file sent')
             else:
                 client.send(message.encode('ascii'))
         except IOError as e:
+            print(e)
             print("io error")
         except socket.error:
             print("socket error")
