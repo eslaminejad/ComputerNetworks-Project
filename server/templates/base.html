@@ -31,7 +31,11 @@
     {% endblock content %}
 </div>
 
-
+{% if request.user.is_authenticated %}
+<h3>test</h3>
+{% else %}
+<h3>else</h3>
+{% endif %}
 
 
    <script src="{% static '/js/registerSw.js' %}"></script>
