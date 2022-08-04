@@ -33,6 +33,12 @@ stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
+login_not_need = ['register', 'login', 'stream', 'video_list']
+valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment'],
+                  'admin': ['Add_tag', 'stream', 'delete_video', 'fix_strike'],
+                  'manager': ['approve_admin', 'get_requests']}
+
+## should implement get comment and likes and ...
 
 class User:
     username = ''
@@ -45,17 +51,18 @@ class User:
             self.username = input_username
             self.password = input_password
             self.logged_in = True
-            users[input_username] = input_password
+            users[input_username] = [input_password, 'normal']
             return True
         else:
             return False
 
     def login(self, input_username, input_password):
         if input_username in users:
-            if users[input_username] == input_password:
+            if users[input_username][0] == input_password:
                 self.username = input_username
                 self.password = input_password
                 self.logged_in = True
+                self.type = users[input_username][1]
                 return True
             return False
         else:
@@ -75,6 +82,7 @@ class Video():
     likes: list
     dislikes: list
     comments: list
+    risk_tags: list
 
     def __init__(self, owner, title):
         self.owner = owner
@@ -82,6 +90,7 @@ class Video():
         self.likes = []
         self.dislikes = []
         self.comments = []
+        self.risk_tags = []
 
     def upload(self):
         soc, adder = file_server.accept()
@@ -98,31 +107,42 @@ class Video():
         return 'successful'
 
 
-def handle_user(command, message, user):
-    if command == 'register' and len(message.split()) == 3:
-        input_username = message.split()[1]
-        input_password = message.split()[2]
-        register = user.register(input_username, input_password)
-        if register:
-            return 'register successful'
-        else:
-            return 'register error'
-
-    elif command == 'login' and len(message.split()) == 3:
-        input_username = message.split()[1]
-        input_password = message.split()[2]
+def handle_user(command, split_message, user):
+    if command == 'register':
+        if len(split_message) == 3:
+            input_username = split_message[1]
+            input_password = split_message[2]
+            register = user.register(input_username, input_password)
+            if register:
+                return 'register successful'
+            else:
+                return 'register error'
+        elif len(split_message) == 4 and split_message[3] == 'admin':
+            input_username = split_message[1]
+            input_password = split_message[2]
+            register = user.register(input_username, input_password)
+            if register:
+                waiting_admins.append(input_username)
+                return 'register successful. waiting to approve by manager.'
+            else:
+                return 'register error'
+    elif command == 'login' and len(split_message) == 3:
+        input_username = split_message[1]
+        input_password = split_message[2]
         login = user.login(input_username, input_password)
         if login:
             return 'login successful'
         else:
             return 'login error'
 
-    elif command == 'logout' and len(message.split()) == 1:
+    elif command == 'logout':
         logout = user.logout()
         if logout:
             return 'logout successful'
         else:
             return 'logout error'
+
+    return 'invalid command'
 
 
 def find_video_by_title(t):
@@ -161,44 +181,72 @@ def comment_video(title, comment, username):
     return 'comment added successfully.'
 
 
+def get_video_list():
+    title_list = []
+    for vid in videos:
+        title_list.append(vid.title)
+    return title_list
+
+
+def approve_admin(username):
+    if username not in waiting_admins:
+        return 'username is not valid.'
+    info = users[username]
+    waiting_admins.remove(username)
+    users[username] = [info[0], 'admin']
+    return username + ' approved as admin.'
+
+
+def add_risk_tag(video_title, tag):
+    vid = find_video_by_title(video_title)
+    if not vid:
+        return 'video is not found.'
+    vid.risk_tags.append(tag)
+    return 'tag added.'
+
+
 def handle(client: socket.socket):
     user = User()
     while True:
         try:
             message = client.recv(1024).decode('ascii')
-            print(message)
-            command = message.split()[0]
-            if command in ['login', 'logout', 'register']:
-                result = handle_user(command, message, user)
+            split_message = message.split()
+            command = split_message[0]
+            if (command not in login_not_need) and (not user.logged_in):
+                client.send('you need to login'.encode('ascii'))
+            elif user.logged_in and (command not in valid_commands[user.type]):
+                client.send('this command is not valid for you.'.encode('ascii'))
+            elif command in ['login', 'logout', 'register']:
+                result = handle_user(command, split_message, user)
                 client.send(result.encode('ascii'))
             elif command == 'upload':
-                if user.logged_in:
-                    title = message.split()[1]
-                    video = Video(user.username, title)
-                    videos.append(video)
-                    result = video.upload()
-                    client.send(result.encode('ascii'))
-                else:
-                    client.send('you need to login'.encode('ascii'))
+                title = split_message[1]
+                video = Video(user.username, title)
+                videos.append(video)
+                result = video.upload()
+                client.send(result.encode('ascii'))
             elif command == 'stream':
-                if user.logged_in:
-                    client.send('be prepare'.encode('ascii'))
-                    filename = 'data/' + message.split()[1]
-                    stream_video(filename)
-                else:
-                    client.send('you need to login'.encode('ascii'))
+                client.send('be prepare'.encode('ascii'))
+                filename = 'data/' + split_message[1]
+                stream_video(filename)
+            elif command == 'video_list':
+                result = get_video_list()
+                client.send(result.encode('ascii'))
             elif command == 'like':
-                if user.logged_in:
-                    result = like_dis_video(message.split()[1], message.split()[2], user.username)
-                    client.send(result.encode('ascii'))
-                else:
-                    client.send('you need to login'.encode('ascii'))
+                result = like_dis_video(split_message[1], split_message[2], user.username)
+                client.send(result.encode('ascii'))
             elif command == 'comment':
-                if user.logged_in:
-                    result = comment_video(message.split()[1], message.split()[2], user.username)
-                    client.send(result.encode('ascii'))
-                else:
-                    client.send('you need to login'.encode('ascii'))
+                result = comment_video(split_message[1], split_message[2], user.username)
+                client.send(result.encode('ascii'))
+            elif command == 'get_requests':
+                result = waiting_admins
+                client.send(result.encode('ascii'))
+            elif command == 'approve_admin':
+                result = approve_admin(split_message[1])
+                client.send(result.encode('ascii'))
+            elif command == 'Add_tag':
+                result = add_risk_tag(split_message[1], split_message[2])
+                client.send(result.encode('ascii'))
 
         except Exception as e:
             print(e)
