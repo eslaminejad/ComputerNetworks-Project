@@ -38,6 +38,7 @@ def video_stream(stream_socket):
 
         if key == ord('q'):
             stream_socket.close()
+            print('inja exit')
             os._exit(1)
             break
 
@@ -47,6 +48,7 @@ def video_stream(stream_socket):
                 st = time.time()
                 cnt = 0
             except:
+                print('inja except khord')
                 pass
         cnt += 1
 
@@ -66,9 +68,9 @@ def audio_stream():
     # create socket
     client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     socket_address = (host, stream_port - 1)
-    print('server listening at', socket_address)
+    # print('server listening at', socket_address)
     client_socket.connect(socket_address)
-    print("CLIENT CONNECTED TO", socket_address)
+    # print("CLIENT CONNECTED TO", socket_address)
     data = b""
     payload_size = struct.calcsize("Q")
     while True:
@@ -87,11 +89,13 @@ def audio_stream():
             frame = pickle.loads(frame_data)
             stream.write(frame)
 
-        except:
+        except Exception as e:
+            print('except, ajab')
+            print(e)
             break
 
     client_socket.close()
-    os._exit(1)
+    # os._exit(1)
 
 
 def get_stream():

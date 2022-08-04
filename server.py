@@ -5,13 +5,14 @@ import cv2, imutils, socket
 import numpy as np
 import time
 import base64
-import threading, wave, pyaudio,pickle,struct
+import threading, wave, pyaudio, pickle, struct
 import sys
 import queue
 import os
 
-BUFF_SIZE = 65536
+import enum
 
+BUFF_SIZE = 65536
 
 host = '127.0.0.1'
 port = 8550
@@ -24,34 +25,39 @@ file_server.bind((host, file_port))
 file_server.listen(2)
 print("server listening")
 
-users = {'ali': '123'}
+users = {'ali': ['123', 'normal'], 'manager': ['supreme_manager#2022', 'manager']}
+waiting_admins = []
+videos = []
 
 stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
+
 class User:
     username = ''
     password = ''
     logged_in = False
+    type = 'normal'
 
-    def register(self, inputusername, inputpassword):
-        if inputusername not in users:
-            self.username = inputusername
-            self.password = inputpassword
+    def register(self, input_username, input_password):
+        if input_username not in users:
+            self.username = input_username
+            self.password = input_password
             self.logged_in = True
-            users[inputusername] = inputpassword
+            users[input_username] = input_password
             return True
         else:
             return False
 
-    def login(self, inputusername, inputpassword):
-        if inputusername in users:
-            if users[inputusername] == inputpassword:
-                self.username = inputusername
-                self.pasword = inputpassword
+    def login(self, input_username, input_password):
+        if input_username in users:
+            if users[input_username] == input_password:
+                self.username = input_username
+                self.password = input_password
                 self.logged_in = True
                 return True
+            return False
         else:
             return False
 
@@ -64,11 +70,11 @@ class User:
 
 
 class Video():
+    title: str
     owner: str
     likes: list
     dislikes: list
     comments: list
-    title: str
 
     def __init__(self, owner, title):
         self.owner = owner
@@ -78,44 +84,81 @@ class Video():
         self.comments = []
 
     def upload(self):
-        soc, addr = file_server.accept()
-        print(f'client connect to upload file {addr}')
-        savefilename = 'data/' + self.title
-        with soc, open(savefilename, 'wb') as file:
-            recvfile = soc.recv(4096)
+        soc, adder = file_server.accept()
+        print(f'client connect to upload file {adder}')
+        saveasfilename = 'data/' + self.title
+        with soc, open(saveasfilename, 'wb') as file:
+            received = soc.recv(4096)
             while True:
-                file.write(recvfile)
-                recvfile = soc.recv(4096)
-                if not recvfile:
+                file.write(received)
+                received = soc.recv(4096)
+                if not received:
                     break
         print("File has been received.")
+        return 'successful'
 
 
-def handle_user(message, user):
-    if message.split()[0] == 'register' and len(message.split()) == 3:
-        inputusername = message.split()[1]
-        inputpassword = message.split()[2]
-        register = user.register(inputusername, inputpassword)
-        if register == True:
+def handle_user(command, message, user):
+    if command == 'register' and len(message.split()) == 3:
+        input_username = message.split()[1]
+        input_password = message.split()[2]
+        register = user.register(input_username, input_password)
+        if register:
             return 'register successful'
         else:
             return 'register error'
 
-    elif message.split()[0] == 'login' and len(message.split()) == 3:
-        inputusername = message.split()[1]
-        inputpassword = message.split()[2]
-        login = user.login(inputusername, inputpassword)
-        if login == True:
+    elif command == 'login' and len(message.split()) == 3:
+        input_username = message.split()[1]
+        input_password = message.split()[2]
+        login = user.login(input_username, input_password)
+        if login:
             return 'login successful'
         else:
             return 'login error'
 
-    elif message.split()[0] == 'logout' and len(message.split()) == 1:
+    elif command == 'logout' and len(message.split()) == 1:
         logout = user.logout()
-        if logout == True:
+        if logout:
             return 'logout successful'
         else:
             return 'logout error'
+
+
+def find_video_by_title(t):
+    for vid in videos:
+        if vid.title == t:
+            return vid
+    return None
+
+
+def like_dis_video(like_not, title, username):
+    video = find_video_by_title(title)
+    if not video:
+        return 'there is not video by this name.'
+    if like_not == 'like':
+        if username in video.likes:
+            video.likes.remove(username)
+            return 'you previously like this video. your like has been removed'
+        if username in video.dislikes:
+            video.dislikes.remove(username)
+        video.likes.append(username)
+    else:
+        if username in video.dislikes:
+            video.dislikes.remove(username)
+            return 'you previously dislike this video. your dislike has been removed'
+        if username in video.likes:
+            video.likes.remove(username)
+        video.dislikes.append(username)
+    return 'your ' + like_not + ' has been approved.'
+
+
+def comment_video(title, comment, username):
+    video = find_video_by_title(title)
+    if not video:
+        return 'there is not video by this name.'
+    video.comments.append([username, comment])
+    return 'comment added successfully.'
 
 
 def handle(client: socket.socket):
@@ -124,28 +167,46 @@ def handle(client: socket.socket):
         try:
             message = client.recv(1024).decode('ascii')
             print(message)
-            if message.split()[0] in ['login', 'logout', 'register']:
-                result = handle_user(message, user, )
+            command = message.split()[0]
+            if command in ['login', 'logout', 'register']:
+                result = handle_user(command, message, user)
                 client.send(result.encode('ascii'))
-
-            elif message.split()[0] == 'upload':
+            elif command == 'upload':
                 if user.logged_in:
                     title = message.split()[1]
                     video = Video(user.username, title)
-                    video.upload()
+                    videos.append(video)
+                    result = video.upload()
+                    client.send(result.encode('ascii'))
                 else:
                     client.send('you need to login'.encode('ascii'))
-            elif message.split()[0] == 'stream':
+            elif command == 'stream':
                 if user.logged_in:
                     client.send('be prepare'.encode('ascii'))
                     filename = 'data/' + message.split()[1]
                     stream_video(filename)
                 else:
                     client.send('you need to login'.encode('ascii'))
+            elif command == 'like':
+                if user.logged_in:
+                    result = like_dis_video(message.split()[1], message.split()[2], user.username)
+                    client.send(result.encode('ascii'))
+                else:
+                    client.send('you need to login'.encode('ascii'))
+            elif command == 'comment':
+                if user.logged_in:
+                    result = comment_video(message.split()[1], message.split()[2], user.username)
+                    client.send(result.encode('ascii'))
+                else:
+                    client.send('you need to login'.encode('ascii'))
 
         except Exception as e:
             print(e)
             print("err sv handle")
+            np.save('users.npy', users)
+            np.save('waiting_admins.npy', waiting_admins)
+            with open("videos.dat", "wb") as f:
+                pickle.dump(videos, f)
             client.close()
             break
 
@@ -157,10 +218,12 @@ def video_stream_gen(vid, q):
             _, frame = vid.read()
             frame = imutils.resize(frame, width=WIDTH)
             q.put(frame)
-        except:
-            os._exit(1)
+        except Exception as e:
+            print('except khord vasate video')
+            print(e)
+            break
+            # os._exit(1)
     print('Player closed')
-    BREAK = True
     vid.release()
 
 
@@ -169,7 +232,8 @@ def video_stream(q, FPS):
     fps, st, frames_to_count, cnt = (0, 0, 1, 0)
     cv2.namedWindow('TRANSMITTING VIDEO')
     cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
-    while True:
+    cont = True
+    while cont:
         msg, client_addr = stream_socket.recvfrom(BUFF_SIZE)
         print('GOT connection from ', client_addr)
         WIDTH = 400
@@ -193,13 +257,16 @@ def video_stream(q, FPS):
                     else:
                         pass
                 except:
+                    print('except inja khord')
                     pass
             cnt += 1
 
             cv2.imshow('TRANSMITTING VIDEO', frame)
             key = cv2.waitKey(int(1000 * TS)) & 0xFF
             if key == ord('q'):
-                os._exit(1)
+                print('inja exit')
+                cont = False
+                # os._exit(1)
                 TS = False
                 break
 
@@ -210,11 +277,13 @@ def audio_stream(filename):
 
     s.listen(5)
     CHUNK = 1024
+    if os.path.exists('data/temp.wav'):
+        os.remove('data/temp.wav')
     command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename, 'data/temp.wav')
     os.system(command)
-    wf = wave.open("temp.wav", 'rb')
+    wf = wave.open("data/temp.wav", 'rb')
     p = pyaudio.PyAudio()
-    print('server listening at', (host, (stream_port - 1)))
+    # print('server listening at', (host, (stream_port - 1)))
     stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
                     channels=wf.getnchannels(),
                     rate=wf.getframerate(),
@@ -251,7 +320,16 @@ def stream_video(filename):
         executor.submit(video_stream_gen, vid, q)
         executor.submit(video_stream, q, FPS)
 
+
 while True:
+    try:
+        users = np.load('users.npy', allow_pickle=True).item()
+        waiting_admins = np.load('waiting_admins.npy')
+        with open("videos.dat") as f:
+            videos = pickle.load(f)
+    except:
+        print('error in load data')
+
     client, address = server.accept()
 
     print(f"client connected with {address}")
