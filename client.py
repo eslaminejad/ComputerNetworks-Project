@@ -1,5 +1,5 @@
 import socket, threading
-
+import sys
 
 import cv2, imutils, socket
 import numpy as np
@@ -17,30 +17,37 @@ client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 file_port = 8551
 
+global STREAM
+STREAM = False
+
 # connect to webserver
 client.connect((host, port))
 print("connected to server")
 
 
-def video_stream(stream_socket):
+def video_stream(stream_socket: socket.socket):
+    global STREAM
     cv2.namedWindow('RECEIVING VIDEO')
     cv2.moveWindow('RECEIVING VIDEO', 10, 360)
     fps, st, frames_to_count, cnt = (0, 0, 20, 0)
+    stream_socket.settimeout(1)
     while True:
-        packet, _ = stream_socket.recvfrom(BUFF_SIZE)
+        try:
+            packet, _ = stream_socket.recvfrom(BUFF_SIZE)
+        except:
+            break
         data = base64.b64decode(packet, ' /')
-        npdata = np.fromstring(data, dtype=np.uint8)
-
+        npdata = np.frombuffer(data, dtype=np.uint8)
         frame = cv2.imdecode(npdata, 1)
         frame = cv2.putText(frame, 'FPS: ' + str(fps), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
         cv2.imshow("RECEIVING VIDEO", frame)
         key = cv2.waitKey(1) & 0xFF
-
         if key == ord('q'):
+            print("video os exit")
+            sys.exit()
             stream_socket.close()
             os._exit(1)
             break
-
         if cnt == frames_to_count:
             try:
                 fps = round(frames_to_count / (time.time() - st))
@@ -49,15 +56,17 @@ def video_stream(stream_socket):
             except:
                 pass
         cnt += 1
-
-    stream_socket.close()
+    print("video end destroy")
     cv2.destroyAllWindows()
+    stream_socket.close()
+    sys.exit()
+
 
 
 def audio_stream():
+    global STREAM
     p = pyaudio.PyAudio()
     CHUNK = 1024
-    print("line 60")
     stream = p.open(format=p.get_format_from_width(2),
                     channels=2,
                     rate=44100,
@@ -72,7 +81,7 @@ def audio_stream():
     print("CLIENT CONNECTED TO", socket_address)
     data = b""
     payload_size = struct.calcsize("Q")
-    while True:
+    while STREAM:
         try:
             while len(data) < payload_size:
                 packet = client_socket.recv(4 * 1024)  # 4K
@@ -91,32 +100,29 @@ def audio_stream():
         except:
             break
 
-    client_socket.close()
-    os._exit(1)
+    print("audio sys exit, STREAM before false: ",STREAM)
+    STREAM = False
+    sys.exit()
+    # client_socket.close()
+    # os._exit(1)
 
 
 def get_stream():
-    print("line 99")
+    global STREAM
+    STREAM = True
     stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     stream_socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, BUFF_SIZE)
 
     message = b'Hello'
     stream_socket.sendto(message, (host, stream_port))
-    print("line 105")
 
     thread1 = threading.Thread(target=audio_stream, args=([]))
     thread1.start()
 
-
     thread2 = threading.Thread(target=video_stream, args=([stream_socket]))
     thread2.start()
-    thread2.join()
-    thread1.join()
-    # from concurrent.futures import ThreadPoolExecutor
-    # with ThreadPoolExecutor(max_workers=2) as executor2:
-    #     print("line 107")
-    #     executor2.submit(audio_stream)
-    #     executor2.submit(video_stream, stream_socket)
+    #thread1.join()
+    #thread2.join()
 
 
 def echo():

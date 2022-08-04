@@ -25,6 +25,8 @@ file_server.listen(2)
 print("server listening")
 
 users = {'ali': '123'}
+global STREAM
+STREAM = False
 
 stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -138,7 +140,12 @@ def handle(client: socket.socket):
             elif message.split()[0] == 'stream':
                 client.send('be prepare'.encode('ascii'))
                 filename = 'data/' + message.split()[1]
-                stream_video(filename)
+                thread2 = threading.Thread(target=stream_video, args=([filename]))
+                print(thread2.name,"def start stream")
+                thread2.start()
+                #thread2.join()
+                # stream_video(filename)
+                print("AFTER STREAM")
 
 
         except Exception as e:
@@ -149,6 +156,7 @@ def handle(client: socket.socket):
 
 
 def video_stream_gen(vid, q):
+    global STREAM
     WIDTH = 400
     while (vid.isOpened()):
         try:
@@ -156,23 +164,34 @@ def video_stream_gen(vid, q):
             frame = imutils.resize(frame, width=WIDTH)
             q.put(frame)
         except:
-            os._exit(1)
-    print('Player closed')
+            print("except video gen")
+            for thread in threading.enumerate():
+                print(thread.name)
+            print(threading.currentThread().name,"*")
+            break
+            # os._exit(1)
+    print('Player closed,stream before false: ',STREAM)
     BREAK = True
     vid.release()
+    STREAM = False
+
+    sys.exit()
+
 
 
 def video_stream(q, FPS):
     global TS
+    global STREAM
     fps, st, frames_to_count, cnt = (0, 0, 1, 0)
     cv2.namedWindow('TRANSMITTING VIDEO')
     cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
-    while True:
+    while STREAM:
         msg, client_addr = stream_socket.recvfrom(BUFF_SIZE)
         print('GOT connection from ', client_addr)
         WIDTH = 400
 
-        while (True):
+        while (STREAM):
+
             frame = q.get()
             encoded, buffer = cv2.imencode('.jpeg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
             message = base64.b64encode(buffer)
@@ -197,9 +216,16 @@ def video_stream(q, FPS):
             cv2.imshow('TRANSMITTING VIDEO', frame)
             key = cv2.waitKey(int(1000 * TS)) & 0xFF
             if key == ord('q'):
+                print("video os exit")
+                for thread in threading.enumerate():
+                    print(thread.name)
                 os._exit(1)
+
                 TS = False
                 break
+    print("after video stream")
+
+    sys.exit()
 
 
 def audio_stream(filename):
@@ -208,14 +234,14 @@ def audio_stream(filename):
 
     s.listen(5)
     CHUNK = 1024
-    print("line 211")
+    print("line 220")
     try:
         os.remove('data/temp.wav')
     except:
         pass
     command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename, 'data/temp.wav')
     os.system(command)
-    print("line 219")
+    print("line 227")
     wf = wave.open("data/temp.wav", 'rb')
     p = pyaudio.PyAudio()
     print('server listening at', (host, (stream_port - 1)))
@@ -227,16 +253,18 @@ def audio_stream(filename):
 
     client_socket, addr = s.accept()
 
-    while True:
+    while STREAM:
         if client_socket:
-            while True:
+            while STREAM:
                 data = wf.readframes(CHUNK)
                 a = pickle.dumps(data)
                 message = struct.pack("Q", len(a)) + a
                 client_socket.sendall(message)
-
+    print("after audio",STREAM)
 
 def stream_video(filename):
+    global STREAM
+    STREAM = True
     q = queue.Queue(maxsize=10)
     vid = cv2.VideoCapture(filename)
     FPS = vid.get(cv2.CAP_PROP_FPS)
@@ -249,24 +277,18 @@ def stream_video(filename):
     d = vid.get(cv2.CAP_PROP_POS_MSEC)
     print(durationInSeconds, d)
 
-    thread1 = threading.Thread(target=audio_stream, args=([filename]))
-    thread1.start()
-
-    thread2 = threading.Thread(target=video_stream_gen, args=([vid, q]))
-    thread2.start()
-
-    thread3 = threading.Thread(target=video_stream, args=([q, FPS]))
+    thread3 = threading.Thread(target=audio_stream, args=([filename]))
+    print(thread3.name,"audio_stream")
     thread3.start()
 
+    thread4 = threading.Thread(target=video_stream_gen, args=([vid, q]))
+    print(thread4.name,"video_stream_gen")
+    thread4.start()
 
-    thread1.join()
-    thread2.join()
-    thread3.join()
-    # from concurrent.futures import ThreadPoolExecutor
-    # with ThreadPoolExecutor(max_workers=3) as executor:
-    #     executor.submit(audio_stream, filename)
-    #     executor.submit(video_stream_gen, vid, q)
-    #     executor.submit(video_stream, q, FPS)
+    thread5 = threading.Thread(target=video_stream, args=([q, FPS]))
+    print(thread5.name,"video_stream")
+    thread5.start()
+
 
 while True:
     client, address = server.accept()
@@ -275,6 +297,8 @@ while True:
 
     client.send("connected".encode('ascii'))
 
-    thread = threading.Thread(target=handle, args=([client]))
-    thread.start()
-    thread.join()
+    threadstart = threading.Thread(target=handle, args=([client]))
+    print(threadstart.name,"thread start connection")
+    threadstart.start()
+    #threadstart.join()
+    print("line 316*")
