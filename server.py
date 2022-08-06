@@ -9,6 +9,7 @@ import threading, wave, pyaudio,pickle,struct
 import sys
 import queue
 import os
+import enum
 
 BUFF_SIZE = 65536
 
@@ -24,7 +25,11 @@ file_server.bind((host, file_port))
 file_server.listen(2)
 print("server listening")
 
-users = {'ali': '123'}
+users = {'ali': ['123', 'normal'], 'manager': ['supreme_manager#2022', 'manager']}
+waiting_admins = []
+videos = []
+
+
 global STREAM
 STREAM = False
 
@@ -32,28 +37,38 @@ stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
+login_not_need = ['register', 'login', 'stream', 'video_list']
+valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment'],
+                  'admin': ['Add_tag', 'stream', 'delete_video', 'fix_strike'],
+                  'manager': ['approve_admin', 'get_requests']}
+## should implement get comment and likes and ...
+
+
 class User:
     username = ''
     password = ''
     logged_in = False
+    type = 'normal'
 
-    def register(self, inputusername, inputpassword):
-        if inputusername not in users:
-            self.username = inputusername
-            self.password = inputpassword
+    def register(self, input_username, input_password):
+        if input_username not in users:
+            self.username = input_username
+            self.password = input_password
             self.logged_in = True
-            users[inputusername] = inputpassword
+            users[input_username] = [input_password, 'normal']
             return True
         else:
             return False
 
-    def login(self, inputusername, inputpassword):
-        if inputusername in users:
-            if users[inputusername] == inputpassword:
-                self.username = inputusername
-                self.pasword = inputpassword
+    def login(self, input_username, input_password):
+        if input_username in users:
+            if users[input_username][0] == input_password:
+                self.username = input_username
+                self.password = input_password
                 self.logged_in = True
+                self.type = users[input_username][1]
                 return True
+            return False
         else:
             return False
 
@@ -66,11 +81,12 @@ class User:
 
 
 class Video():
+    title: str
     owner: str
     likes: list
     dislikes: list
     comments: list
-    title: str
+    risk_tags: list
 
     def __init__(self, owner, title):
         self.owner = owner
@@ -78,46 +94,119 @@ class Video():
         self.likes = []
         self.dislikes = []
         self.comments = []
+        self.risk_tags = []
 
     def upload(self):
-        soc, addr = file_server.accept()
-        print(f'client connect to upload file {addr}')
-        savefilename = 'data/' + self.title
-        with soc, open(savefilename, 'wb') as file:
-            recvfile = soc.recv(4096)
+        soc, adder = file_server.accept()
+        print(f'client connect to upload file {adder}')
+        saveasfilename = 'data/' + self.title
+        with soc, open(saveasfilename, 'wb') as file:
+            received = soc.recv(4096)
             while True:
-                file.write(recvfile)
-                recvfile = soc.recv(4096)
-                if not recvfile:
+                file.write(received)
+                received = soc.recv(4096)
+                if not received:
                     break
         print("File has been received.")
+        return 'successful'
 
 
-def handle_user(message, user):
-    if message.split()[0] == 'register' and len(message.split()) == 3:
-        inputusername = message.split()[1]
-        inputpassword = message.split()[2]
-        register = user.register(inputusername, inputpassword)
-        if register == True:
-            return 'register successful'
-        else:
-            return 'register error'
-
-    elif message.split()[0] == 'login' and len(message.split()) == 3:
-        inputusername = message.split()[1]
-        inputpassword = message.split()[2]
-        login = user.login(inputusername, inputpassword)
-        if login == True:
+def handle_user(command, split_message, user):
+    if command == 'register':
+        if len(split_message) == 3:
+            input_username = split_message[1]
+            input_password = split_message[2]
+            register = user.register(input_username, input_password)
+            if register:
+                return 'register successful'
+            else:
+                return 'register error'
+        elif len(split_message) == 4 and split_message[3] == 'admin':
+            input_username = split_message[1]
+            input_password = split_message[2]
+            register = user.register(input_username, input_password)
+            if register:
+                waiting_admins.append(input_username)
+                return 'register successful. waiting to approve by manager.'
+            else:
+                return 'register error'
+    elif command == 'login' and len(split_message) == 3:
+        input_username = split_message[1]
+        input_password = split_message[2]
+        login = user.login(input_username, input_password)
+        if login:
             return 'login successful'
         else:
             return 'login error'
 
-    elif message.split()[0] == 'logout' and len(message.split()) == 1:
+    elif command == 'logout':
         logout = user.logout()
-        if logout == True:
+        if logout:
             return 'logout successful'
         else:
             return 'logout error'
+
+    return 'invalid command'
+
+
+def find_video_by_title(t):
+    for vid in videos:
+        if vid.title == t:
+            return vid
+    return None
+
+
+def like_dis_video(like_not, title, username):
+    video = find_video_by_title(title)
+    if not video:
+        return 'there is not video by this name.'
+    if like_not == 'like':
+        if username in video.likes:
+            video.likes.remove(username)
+            return 'you previously like this video. your like has been removed'
+        if username in video.dislikes:
+            video.dislikes.remove(username)
+        video.likes.append(username)
+    else:
+        if username in video.dislikes:
+            video.dislikes.remove(username)
+            return 'you previously dislike this video. your dislike has been removed'
+        if username in video.likes:
+            video.likes.remove(username)
+        video.dislikes.append(username)
+    return 'your ' + like_not + ' has been approved.'
+
+
+def comment_video(title, comment, username):
+    video = find_video_by_title(title)
+    if not video:
+        return 'there is not video by this name.'
+    video.comments.append([username, comment])
+    return 'comment added successfully.'
+
+
+def get_video_list():
+    title_list = []
+    for vid in videos:
+        title_list.append(vid.title)
+    return title_list
+
+
+def approve_admin(username):
+    if username not in waiting_admins:
+        return 'username is not valid.'
+    info = users[username]
+    waiting_admins.remove(username)
+    users[username] = [info[0], 'admin']
+    return username + ' approved as admin.'
+
+
+def add_risk_tag(video_title, tag):
+    vid = find_video_by_title(video_title)
+    if not vid:
+        return 'video is not found.'
+    vid.risk_tags.append(tag)
+    return 'tag added.'
 
 
 def handle(client: socket.socket):
@@ -125,21 +214,24 @@ def handle(client: socket.socket):
     while True:
         try:
             message = client.recv(1024).decode('ascii')
-            print(message)
-            if message.split()[0] in ['login', 'logout', 'register']:
-                result = handle_user(message, user, )
+            split_message = message.split()
+            command = split_message[0]
+            if (command not in login_not_need) and (not user.logged_in):
+                client.send('you need to login'.encode('ascii'))
+            elif user.logged_in and (command not in valid_commands[user.type]):
+                client.send('this command is not valid for you.'.encode('ascii'))
+            elif command in ['login', 'logout', 'register']:
+                result = handle_user(command, split_message, user)
                 client.send(result.encode('ascii'))
-
-            elif message.split()[0] == 'upload':
-                if user.logged_in:
-                    title = message.split()[1]
-                    video = Video(user.username, title)
-                    video.upload()
-                else:
-                    client.send('you need to login'.encode('ascii'))
-            elif message.split()[0] == 'stream':
+            elif command == 'upload':
+                title = split_message[1]
+                video = Video(user.username, title)
+                videos.append(video)
+                result = video.upload()
+                client.send(result.encode('ascii'))
+            elif command == 'stream':
                 client.send('be prepare'.encode('ascii'))
-                filename = 'data/' + message.split()[1]
+                filename = 'data/' + split_message[1]
                 thread2 = threading.Thread(target=stream_video, args=([filename]))
                 print(thread2.name,"def start stream")
                 thread2.start()
@@ -147,10 +239,34 @@ def handle(client: socket.socket):
                 # stream_video(filename)
                 print("AFTER STREAM")
 
+            elif command == 'video_list':
+                print("AFTER STREAM")
+                result = get_video_list()
+                client.send(result.encode('ascii'))
+            elif command == 'like':
+                result = like_dis_video(split_message[1], split_message[2], user.username)
+                client.send(result.encode('ascii'))
+            elif command == 'comment':
+                result = comment_video(split_message[1], split_message[2], user.username)
+                client.send(result.encode('ascii'))
+            elif command == 'get_requests':
+                result = waiting_admins
+                client.send(result.encode('ascii'))
+            elif command == 'approve_admin':
+                result = approve_admin(split_message[1])
+                client.send(result.encode('ascii'))
+            elif command == 'Add_tag':
+                result = add_risk_tag(split_message[1], split_message[2])
+                client.send(result.encode('ascii'))
+
 
         except Exception as e:
             print(e)
             print("err sv handle")
+            np.save('users.npy', users)
+            np.save('waiting_admins.npy', waiting_admins)
+            with open("videos.dat", "wb") as f:
+                pickle.dump(videos, f)
             client.close()
             break
 
@@ -185,12 +301,12 @@ def video_stream(q, FPS):
     fps, st, frames_to_count, cnt = (0, 0, 1, 0)
     cv2.namedWindow('TRANSMITTING VIDEO')
     cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
-    while STREAM:
+    while True:
         msg, client_addr = stream_socket.recvfrom(BUFF_SIZE)
         print('GOT connection from ', client_addr)
         WIDTH = 400
 
-        while (STREAM):
+        while (True):
 
             frame = q.get()
             encoded, buffer = cv2.imencode('.jpeg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -235,10 +351,8 @@ def audio_stream(filename):
     s.listen(5)
     CHUNK = 1024
     print("line 220")
-    try:
+    if os.path.exists('data/temp.wav'):
         os.remove('data/temp.wav')
-    except:
-        pass
     command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename, 'data/temp.wav')
     os.system(command)
     print("line 227")
@@ -291,6 +405,14 @@ def stream_video(filename):
 
 
 while True:
+    try:
+        users = np.load('users.npy', allow_pickle=True).item()
+        waiting_admins = np.load('waiting_admins.npy')
+        with open("videos.dat") as f:
+            videos = pickle.load(f)
+    except:
+        print('error in load data')
+
     client, address = server.accept()
 
     print(f"client connected with {address}")
@@ -300,5 +422,3 @@ while True:
     threadstart = threading.Thread(target=handle, args=([client]))
     print(threadstart.name,"thread start connection")
     threadstart.start()
-    #threadstart.join()
-    print("line 316*")

@@ -1,3 +1,4 @@
+import random
 import socket, threading
 import sys
 
@@ -27,8 +28,10 @@ print("connected to server")
 
 def video_stream(stream_socket: socket.socket):
     global STREAM
-    cv2.namedWindow('RECEIVING VIDEO')
-    cv2.moveWindow('RECEIVING VIDEO', 10, 360)
+    winname = 'RECEIVING VIDEO -'+str(random.randint(1000,9999))
+    print(winname)
+    cv2.namedWindow(winname)
+    cv2.moveWindow(winname, 10, 360)
     fps, st, frames_to_count, cnt = (0, 0, 20, 0)
     stream_socket.settimeout(1)
     while True:
@@ -40,7 +43,7 @@ def video_stream(stream_socket: socket.socket):
         npdata = np.frombuffer(data, dtype=np.uint8)
         frame = cv2.imdecode(npdata, 1)
         frame = cv2.putText(frame, 'FPS: ' + str(fps), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
-        cv2.imshow("RECEIVING VIDEO", frame)
+        cv2.imshow(winname, frame)
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             print("video os exit")
@@ -57,7 +60,7 @@ def video_stream(stream_socket: socket.socket):
                 pass
         cnt += 1
     print("video end destroy")
-    cv2.destroyAllWindows()
+    cv2.destroyWindow(winname)
     stream_socket.close()
     sys.exit()
 
