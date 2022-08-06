@@ -299,8 +299,8 @@ def video_stream(q, FPS):
     global TS
     global STREAM
     fps, st, frames_to_count, cnt = (0, 0, 1, 0)
-    cv2.namedWindow('TRANSMITTING VIDEO')
-    cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
+    #cv2.namedWindow('TRANSMITTING VIDEO')
+    #cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
     while True:
         msg, client_addr = stream_socket.recvfrom(BUFF_SIZE)
         print('GOT connection from ', client_addr)
@@ -329,7 +329,7 @@ def video_stream(q, FPS):
                     pass
             cnt += 1
 
-            cv2.imshow('TRANSMITTING VIDEO', frame)
+            #cv2.imshow('TRANSMITTING VIDEO', frame)
             key = cv2.waitKey(int(1000 * TS)) & 0xFF
             if key == ord('q'):
                 print("video os exit")
@@ -340,7 +340,7 @@ def video_stream(q, FPS):
                 TS = False
                 break
     print("after video stream")
-
+    cv2.destroyWindow('TRANSMITTING VIDEO')
     sys.exit()
 
 
@@ -407,6 +407,7 @@ def stream_video(filename):
 while True:
     try:
         users = np.load('users.npy', allow_pickle=True).item()
+        print(users)
         waiting_admins = np.load('waiting_admins.npy')
         with open("videos.dat") as f:
             videos = pickle.load(f)
