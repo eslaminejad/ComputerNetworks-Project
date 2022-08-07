@@ -1,15 +1,18 @@
-import socket
-import threading
-
-import cv2, imutils, socket
-import numpy as np
-import time
 import base64
-import threading, wave, pyaudio,pickle,struct
-import sys
-import queue
 import os
-import enum
+import pickle
+import pyaudio
+import queue
+import struct
+import sys
+import threading
+import time
+import wave
+
+import cv2
+import imutils
+import numpy as np
+import socket
 
 BUFF_SIZE = 65536
 
@@ -25,9 +28,11 @@ file_server.bind((host, file_port))
 file_server.listen(2)
 print("server listening")
 
-users = {'ali': ['123', 'normal'], 'manager': ['supreme_manager#2022', 'manager']}
+users = {'ali': ['123', 'normal', 0, -1], 'manager': ['supreme_manager#2022', 'manager']}
+# 3rd item is total number of uploaded video. 4th is index of last video deleted.
 waiting_admins = []
 videos = []
+strike_users = []
 
 
 global STREAM
@@ -37,18 +42,20 @@ stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
-login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list']
-valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment', 'command_list'],
-                  'admin': ['logout', 'add_tag', 'stream', 'delete_video', 'fix_strike', 'command_list'],
-                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list']}
+login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit']
+valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
+                             ' comment', 'command_list', 'quit'],
+                  'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
+                            'fix_strike', 'command_list', 'quit'],
+                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
-                  'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list']
-special_commands = {'normal': ['logout', 'stream [name].[format]', 'upload [name].[format]',
-                               'like [like/dis] [name].[format]', 'comment [name].[format] [comment]', 'command_list'],
-                    'admin': ['logout', 'add_tag [name].[format] [tag]', 'stream [name].[format]',
-                              'delete_video [name].[format]', 'fix_strike [username]', 'command_list'],
-                    'manager': ['logout', 'approve_admin [username]', 'get_requests', 'command_list']}
+                  'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list', 'quit']
+special_commands = {'normal': ['logout', 'upload [name].[format]', 'like [like/dis] [name].[format]',
+                               'comment [name].[format] [comment]'],
+                    'admin': ['logout', 'add_tag [name].[format] [tag]', 'delete_video [name].[format]',
+                              'fix_strike [username]'],
+                    'manager': ['logout', 'approve_admin [username]', 'get_requests']}
 
 
 class User:
@@ -56,6 +63,8 @@ class User:
     password = ''
     logged_in = False
     type = ''
+    uploaded_video_num = 0
+    last_video_deleted = -1
 
     def register(self, input_username, input_password):
         if input_username not in users:
@@ -63,7 +72,7 @@ class User:
             self.password = input_password
             self.logged_in = True
             self.type = 'normal'
-            users[input_username] = [input_password, 'normal']
+            users[input_username] = [input_password, 'normal', 0, -1]
             return True
         else:
             return False
@@ -75,6 +84,8 @@ class User:
                 self.password = input_password
                 self.logged_in = True
                 self.type = users[input_username][1]
+                self.uploaded_video_num = users[input_username][2]
+                self.last_video_deleted = users[input_username][3]
                 return True
             return False
         else:
@@ -95,14 +106,16 @@ class Video():
     dislikes: list
     comments: list
     risk_tags: list
+    owner_index: int
 
-    def __init__(self, owner, title):
+    def __init__(self, owner, title, owner_index):
         self.owner = owner
         self.title = title
         self.likes = []
         self.dislikes = []
         self.comments = []
         self.risk_tags = []
+        self.owner_index = owner_index
 
     def upload(self):
         soc, adder = file_server.accept()
@@ -237,6 +250,33 @@ def get_video_detail(title):
         return detail
 
 
+def delete_video(user, title):
+    vid = get_video_by_title(title)
+    if vid is None:
+        return 'there is not video with this name.'
+    videos.remove(vid)
+    if os.path.exists('data/' + title):
+        os.remove('data/' + title)
+    new_deleted = vid.owner_index
+    message = ''
+    if new_deleted == (user.last_video_deleted + 1):
+        strike_users.append(user.username)
+        user.last_video_deleted = -1
+        message = 'user added to strike list.'
+    else:
+        user.last_video_deleted = new_deleted
+        message = 'video deleted.'
+    users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
+    return message
+
+
+def fix_strike(username):
+    if username not in strike_users:
+        return 'this user is not in strike list'
+    strike_users.remove(username)
+    return 'successful'
+
+
 def handle(client: socket.socket):
     user = User()
     while True:
@@ -255,11 +295,15 @@ def handle(client: socket.socket):
                 title = split_message[1]
                 if get_video_by_title(title):
                     client.send('video title is invalid.'.encode('ascii'))
+                elif user.username in strike_users:
+                    client.send('user is in strike list and can not upload video.'.encode('ascii'))
                 else:
                     client.send('successful'.encode('ascii'))
-                    video = Video(user.username, title)
+                    video = Video(user.username, title, user.uploaded_video_num + 1)
                     videos.append(video)
                     result = video.upload()
+                    user.uploaded_video_num += 1
+                    users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
                     client.send(result.encode('ascii'))
             elif command == 'stream':
                 if get_video_by_title(split_message[1]):
@@ -300,8 +344,14 @@ def handle(client: socket.socket):
             elif command == 'video_detail':
                 result = get_video_detail(split_message[1])
                 client.send(result.encode('ascii'))
-            elif command == 'q':
-                raise Exception
+            elif command == 'delete_video':
+                result = delete_video(user, split_message[1])
+                client.send(result.encode('ascii'))
+            elif command == 'fix_strike':
+                result = fix_strike(split_message[1])
+                client.send(result.encode('ascii'))
+            elif command == 'quit':
+                raise socket.error
             else:
                 client.send('invalid command! enter command_list for help.'.encode('ascii'))
 
@@ -309,6 +359,7 @@ def handle(client: socket.socket):
             print(e)
             print("err sv handle")
             np.save('users.npy', users)
+            np.save('strike_users.npy', strike_users)
             np.save('waiting_admins.npy', waiting_admins)
             with open("videos.dat", "wb") as f:
                 pickle.dump(videos, f)
@@ -352,7 +403,7 @@ def video_stream(q, FPS):
         print('GOT connection from ', client_addr)
         WIDTH = 400
 
-        while (True):
+        while True:
 
             frame = q.get()
             encoded, buffer = cv2.imencode('.jpeg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -424,6 +475,7 @@ def audio_stream(filename :str):
     if os.path.exists(filename.split('.')[0] + '.wav'):
         os.remove(filename.split('.')[0] + '.wav')
 
+
 def stream_video(filename):
     global STREAM
     STREAM = True
@@ -455,7 +507,7 @@ def stream_video(filename):
 while True:
     try:
         users = np.load('users.npy', allow_pickle=True).item()
-        #print(users)
+        strike_users = np.load('strike_users.npy')
         waiting_admins = np.load('waiting_admins.npy')
         with open("videos.dat") as f:
             videos = pickle.load(f)
