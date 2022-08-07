@@ -23,6 +23,8 @@ STREAM = False
 
 # connect to webserver
 client.connect((host, port))
+message = client.recv(1024).decode('ascii')
+print(message)
 print("connected to server")
 
 
@@ -137,18 +139,28 @@ def echo():
             if command == 'upload':
                 filename = message.split()[2]
                 client.send(('upload ' + message.split()[1]).encode('ascii'))
-                file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                file_client.connect((host, file_port))
-                with file_client, open(filename, 'rb') as file:
-                    sendfile = file.read()
-                    file_client.sendall(sendfile)
-                print('file sent')
+                response = client.recv(1024).decode('ascii')
+                if response == 'successful':
+                    file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    file_client.connect((host, file_port))
+                    with file_client, open(filename, 'rb') as file:
+                        sendfile = file.read()
+                        file_client.sendall(sendfile)
+                    new_response = client.recv(1024).decode('ascii')
+                    print(new_response)
+                else:
+                    print(response)
             elif command == 'stream':
                 client.send(message.encode('ascii'))
-                # TODO
-                get_stream()
+                response = client.recv(1024).decode('ascii')
+                if response == 'successful':
+                    get_stream()
+                else:
+                    print(response)
             else:
                 client.send(message.encode('ascii'))
+                response = client.recv(1024).decode('ascii')
+                print(response)
         except IOError as e:
             print(e)
             print("io error")
@@ -172,5 +184,5 @@ def read():
 echo_thread = threading.Thread(target=echo)
 echo_thread.start()
 
-read_thread = threading.Thread(target=read)
-read_thread.start()
+# read_thread = threading.Thread(target=read)
+# read_thread.start()

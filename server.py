@@ -37,24 +37,32 @@ stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
-login_not_need = ['register', 'login', 'stream', 'video_list']
-valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment'],
-                  'admin': ['Add_tag', 'stream', 'delete_video', 'fix_strike'],
-                  'manager': ['approve_admin', 'get_requests']}
-## should implement get comment and likes and ...
+login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list']
+valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment', 'command_list'],
+                  'admin': ['logout', 'add_tag', 'stream', 'delete_video', 'fix_strike', 'command_list'],
+                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list']}
+
+usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
+                  'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list']
+special_commands = {'normal': ['logout', 'stream [name].[format]', 'upload [name].[format]',
+                               'like [like/dis] [name].[format]', 'comment [name].[format] [comment]', 'command_list'],
+                    'admin': ['logout', 'add_tag [name].[format] [tag]', 'stream [name].[format]',
+                              'delete_video [name].[format]', 'fix_strike [username]', 'command_list'],
+                    'manager': ['logout', 'approve_admin [username]', 'get_requests', 'command_list']}
 
 
 class User:
     username = ''
     password = ''
     logged_in = False
-    type = 'normal'
+    type = ''
 
     def register(self, input_username, input_password):
         if input_username not in users:
             self.username = input_username
             self.password = input_password
             self.logged_in = True
+            self.type = 'normal'
             users[input_username] = [input_password, 'normal']
             return True
         else:
@@ -149,7 +157,7 @@ def handle_user(command, split_message, user):
     return 'invalid command'
 
 
-def find_video_by_title(t):
+def get_video_by_title(t):
     for vid in videos:
         if vid.title == t:
             return vid
@@ -157,7 +165,7 @@ def find_video_by_title(t):
 
 
 def like_dis_video(like_not, title, username):
-    video = find_video_by_title(title)
+    video = get_video_by_title(title)
     if not video:
         return 'there is not video by this name.'
     if like_not == 'like':
@@ -178,7 +186,7 @@ def like_dis_video(like_not, title, username):
 
 
 def comment_video(title, comment, username):
-    video = find_video_by_title(title)
+    video = get_video_by_title(title)
     if not video:
         return 'there is not video by this name.'
     video.comments.append([username, comment])
@@ -202,11 +210,31 @@ def approve_admin(username):
 
 
 def add_risk_tag(video_title, tag):
-    vid = find_video_by_title(video_title)
+    vid = get_video_by_title(video_title)
     if not vid:
         return 'video is not found.'
     vid.risk_tags.append(tag)
     return 'tag added.'
+
+
+def get_valid_commands(user):
+    commands = usual_commands
+    if user.type != '':
+        commands += special_commands[user.type]
+    return commands
+
+
+def get_video_detail(title):
+    vid = get_video_by_title(title)
+    if vid is None:
+        return 'invalid video title!'
+    else:
+        detail = {'owner': vid.owner,
+                  'likes': len(vid.likes),
+                  'dislikes': len(vid.dislikes),
+                  'comments': vid.comments,
+                  'restriction': vid.risk_tags}
+        return detail
 
 
 def handle(client: socket.socket):
@@ -225,29 +253,36 @@ def handle(client: socket.socket):
                 client.send(result.encode('ascii'))
             elif command == 'upload':
                 title = split_message[1]
-                video = Video(user.username, title)
-                videos.append(video)
-                result = video.upload()
-                client.send(result.encode('ascii'))
+                if get_video_by_title(title):
+                    client.send('video title is invalid.'.encode('ascii'))
+                else:
+                    client.send('successful'.encode('ascii'))
+                    video = Video(user.username, title)
+                    videos.append(video)
+                    result = video.upload()
+                    client.send(result.encode('ascii'))
             elif command == 'stream':
-                client.send('be prepare'.encode('ascii'))
-                filename = 'data/' + split_message[1]
-                thread2 = threading.Thread(target=stream_video, args=([filename]))
-                print(thread2.name,"def start stream")
-                thread2.start()
-                #thread2.join()
-                # stream_video(filename)
-                print("AFTER STREAM")
+                if get_video_by_title(split_message[1]):
+                    client.send('successful'.encode('ascii'))
+                    filename = 'data/' + split_message[1]
+                    thread2 = threading.Thread(target=stream_video, args=([filename]))
+                    print(thread2.name, "def start stream")
+                    thread2.start()
+                    #thread2.join()
+                    # stream_video(filename)
+                    print("AFTER STREAM")
+                else:
+                    client.send('there is not video by this name.'.encode('ascii'))
 
             elif command == 'video_list':
-                print("AFTER STREAM")
                 result = get_video_list()
                 client.send(result.encode('ascii'))
             elif command == 'like':
                 result = like_dis_video(split_message[1], split_message[2], user.username)
                 client.send(result.encode('ascii'))
             elif command == 'comment':
-                result = comment_video(split_message[1], split_message[2], user.username)
+                com = ' '.join(split_message[2:])
+                result = comment_video(split_message[1], com, user.username)
                 client.send(result.encode('ascii'))
             elif command == 'get_requests':
                 result = waiting_admins
@@ -255,12 +290,20 @@ def handle(client: socket.socket):
             elif command == 'approve_admin':
                 result = approve_admin(split_message[1])
                 client.send(result.encode('ascii'))
-            elif command == 'Add_tag':
-                result = add_risk_tag(split_message[1], split_message[2])
+            elif command == 'add_tag':
+                tag = ' '.join(split_message[2:])
+                result = add_risk_tag(split_message[1], tag)
                 client.send(result.encode('ascii'))
+            elif command == 'command_list':
+                result = get_valid_commands(user)
+                client.send(result.encode('ascii'))
+            elif command == 'video_detail':
+                result = get_video_detail(split_message[1])
+                client.send(result.encode('ascii'))
+            else:
+                client.send('invalid command! enter command_list for help.'.encode('ascii'))
 
-
-        except Exception as e:
+        except socket.error as e:
             print(e)
             print("err sv handle")
             np.save('users.npy', users)
@@ -269,6 +312,8 @@ def handle(client: socket.socket):
                 pickle.dump(videos, f)
             client.close()
             break
+        except:
+            client.send('invalid command! enter command_list for help.'.encode('ascii'))
 
 
 def video_stream_gen(vid, q):
@@ -292,7 +337,6 @@ def video_stream_gen(vid, q):
     STREAM = False
 
     sys.exit()
-
 
 
 def video_stream(q, FPS):
@@ -351,12 +395,12 @@ def audio_stream(filename):
     s.listen(5)
     CHUNK = 1024
     print("line 220")
-    if os.path.exists('data/temp.wav'):
-        os.remove('data/temp.wav')
-    command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename, 'data/temp.wav')
+    if os.path.exists(filename.split('.')[0] + '.wav'):
+        os.remove(filename.split('.')[0] + '.wav')
+    command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename, filename.split('.')[0] + '.wav')
     os.system(command)
     print("line 227")
-    wf = wave.open("data/temp.wav", 'rb')
+    wf = wave.open(filename.split('.')[0] + '.wav', 'rb')
     p = pyaudio.PyAudio()
     print('server listening at', (host, (stream_port - 1)))
     stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
@@ -374,7 +418,8 @@ def audio_stream(filename):
                 a = pickle.dumps(data)
                 message = struct.pack("Q", len(a)) + a
                 client_socket.sendall(message)
-    print("after audio",STREAM)
+    print("after audio", STREAM)
+
 
 def stream_video(filename):
     global STREAM
