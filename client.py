@@ -142,7 +142,6 @@ def echo():
                 with file_client, open(filename, 'rb') as file:
                     sendfile = file.read()
                     file_client.sendall(sendfile)
-                print('file sent')
             elif command == 'stream':
                 client.send(message.encode('ascii'))
                 # TODO
@@ -163,6 +162,7 @@ def read():
         try:
             message = client.recv(1024).decode('ascii')
             print(message)
+
         except:
             print("err read")
             client.close()

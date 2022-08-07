@@ -38,7 +38,7 @@ stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
 login_not_need = ['register', 'login', 'stream', 'video_list']
-valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment'],
+valid_commands = {'normal': ['logout', 'stream', 'upload', 'like', ' comment', 'q'],
                   'admin': ['Add_tag', 'stream', 'delete_video', 'fix_strike'],
                   'manager': ['approve_admin', 'get_requests']}
 ## should implement get comment and likes and ...
@@ -216,6 +216,7 @@ def handle(client: socket.socket):
             message = client.recv(1024).decode('ascii')
             split_message = message.split()
             command = split_message[0]
+            print(message)
             if (command not in login_not_need) and (not user.logged_in):
                 client.send('you need to login'.encode('ascii'))
             elif user.logged_in and (command not in valid_commands[user.type]):
@@ -237,10 +238,9 @@ def handle(client: socket.socket):
                 thread2.start()
                 #thread2.join()
                 # stream_video(filename)
-                print("AFTER STREAM")
+                #print("AFTER STREAM")
 
             elif command == 'video_list':
-                print("AFTER STREAM")
                 result = get_video_list()
                 client.send(result.encode('ascii'))
             elif command == 'like':
@@ -258,16 +258,17 @@ def handle(client: socket.socket):
             elif command == 'Add_tag':
                 result = add_risk_tag(split_message[1], split_message[2])
                 client.send(result.encode('ascii'))
-
+            elif command == 'q':
+                raise Exception
 
         except Exception as e:
-            print(e)
-            print("err sv handle")
+            #print(e)
+            #print("err sv handle")
             np.save('users.npy', users)
             np.save('waiting_admins.npy', waiting_admins)
             with open("videos.dat", "wb") as f:
+                #print("save videos in dat",)
                 pickle.dump(videos, f)
-            client.close()
             break
 
 
@@ -344,19 +345,18 @@ def video_stream(q, FPS):
     sys.exit()
 
 
-def audio_stream(filename):
+def audio_stream(filename :str):
     s = socket.socket()
     s.bind((host, (stream_port - 1)))
 
     s.listen(5)
     CHUNK = 1024
     print("line 220")
-    if os.path.exists('data/temp.wav'):
-        os.remove('data/temp.wav')
-    command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename, 'data/temp.wav')
+    audioname = filename.replace('mp4','wav')
+    command = "ffmpeg -i {} -ab 160k -ac 2 -ar 44100 -vn {}".format(filename,audioname)
     os.system(command)
     print("line 227")
-    wf = wave.open("data/temp.wav", 'rb')
+    wf = wave.open(audioname, 'rb')
     p = pyaudio.PyAudio()
     print('server listening at', (host, (stream_port - 1)))
     stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
@@ -375,6 +375,8 @@ def audio_stream(filename):
                 message = struct.pack("Q", len(a)) + a
                 client_socket.sendall(message)
     print("after audio",STREAM)
+    if os.path.exists(audioname):
+        os.remove(audioname)
 
 def stream_video(filename):
     global STREAM
@@ -407,12 +409,15 @@ def stream_video(filename):
 while True:
     try:
         users = np.load('users.npy', allow_pickle=True).item()
-        print(users)
+        #print(users)
         waiting_admins = np.load('waiting_admins.npy')
         with open("videos.dat") as f:
             videos = pickle.load(f)
-    except:
-        print('error in load data')
+            #print(videos)
+    except Exception as e:
+        pass
+        #print(e)
+        #print('error in load data')
 
     client, address = server.accept()
 
@@ -421,5 +426,5 @@ while True:
     client.send("connected".encode('ascii'))
 
     threadstart = threading.Thread(target=handle, args=([client]))
-    print(threadstart.name,"thread start connection")
+    #print(threadstart.name,"thread start connection")
     threadstart.start()
