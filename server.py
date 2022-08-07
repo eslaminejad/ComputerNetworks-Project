@@ -300,6 +300,8 @@ def handle(client: socket.socket):
             elif command == 'video_detail':
                 result = get_video_detail(split_message[1])
                 client.send(result.encode('ascii'))
+            elif command == 'q':
+                raise Exception
             else:
                 client.send('invalid command! enter command_list for help.'.encode('ascii'))
 
@@ -388,7 +390,7 @@ def video_stream(q, FPS):
     sys.exit()
 
 
-def audio_stream(filename):
+def audio_stream(filename :str):
     s = socket.socket()
     s.bind((host, (stream_port - 1)))
 
@@ -419,7 +421,8 @@ def audio_stream(filename):
                 message = struct.pack("Q", len(a)) + a
                 client_socket.sendall(message)
     print("after audio", STREAM)
-
+    if os.path.exists(filename.split('.')[0] + '.wav'):
+        os.remove(filename.split('.')[0] + '.wav')
 
 def stream_video(filename):
     global STREAM
@@ -452,7 +455,7 @@ def stream_video(filename):
 while True:
     try:
         users = np.load('users.npy', allow_pickle=True).item()
-        print(users)
+        #print(users)
         waiting_admins = np.load('waiting_admins.npy')
         with open("videos.dat") as f:
             videos = pickle.load(f)
@@ -466,5 +469,5 @@ while True:
     client.send("connected".encode('ascii'))
 
     threadstart = threading.Thread(target=handle, args=([client]))
-    print(threadstart.name,"thread start connection")
+    #print(threadstart.name,"thread start connection")
     threadstart.start()
