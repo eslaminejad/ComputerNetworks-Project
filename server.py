@@ -293,6 +293,7 @@ def handle(client: socket.socket, addr):
                 new_req = time.perf_counter()
                 if new_req - last_req[addr] < 0.5:
                     client.close()
+                    pass
                 last_req[addr] = new_req
 
 
