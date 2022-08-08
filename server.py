@@ -42,9 +42,9 @@ stream_socket.bind((host, stream_port))
 
 login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit', 'ping']
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
-                             ' comment', 'command_list', 'ping', 'quit'],
+                             'comment', 'command_list', 'ping', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
-                            'fix_strike', 'get_strike_users', 'command_list', 'quit'],
+                            'fix_strike', 'get_strike_users', 'command_list', 'ping', 'quit'],
                   'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
