@@ -23,7 +23,7 @@ STREAM = False
 
 # connect to webserver
 client.connect((host, port))
-message = client.recv(1024).decode('ascii')
+message = pickle.loads(client.recv(1024))
 print(message)
 print("connected to server")
 
@@ -139,27 +139,27 @@ def echo():
             if command == 'upload':
                 filename = message.split()[2]
                 client.send(('upload ' + message.split()[1]).encode('ascii'))
-                response = client.recv(1024).decode('ascii')
+                response = pickle.loads(client.recv(1024))
                 if response == 'successful':
                     file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     file_client.connect((host, file_port))
                     with file_client, open(filename, 'rb') as file:
                         sendfile = file.read()
                         file_client.sendall(sendfile)
-                    new_response = client.recv(1024).decode('ascii')
+                    new_response = pickle.loads(client.recv(1024))
                     print(new_response)
                 else:
                     print(response)
             elif command == 'stream':
                 client.send(message.encode('ascii'))
-                response = client.recv(1024).decode('ascii')
+                response = pickle.loads(client.recv(1024))
                 if response == 'successful':
                     get_stream()
                 else:
                     print(response)
             else:
                 client.send(message.encode('ascii'))
-                response = client.recv(1024).decode('ascii')
+                response = pickle.loads(client.recv(1024))
                 print(response)
         except IOError as e:
             print(e)
@@ -173,7 +173,7 @@ def echo():
 def read():
     while True:
         try:
-            message = client.recv(1024).decode('ascii')
+            message = pickle.loads(client.recv(1024))
             print(message)
         except:
             print("err read")

@@ -46,15 +46,15 @@ login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', '
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
                              ' comment', 'command_list', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
-                            'fix_strike', 'command_list', 'quit'],
+                            'fix_strike', 'get_strike_users', 'command_list', 'quit'],
                   'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
                   'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list', 'quit']
-special_commands = {'normal': ['logout', 'upload [name].[format]', 'like [like/dis] [name].[format]',
+special_commands = {'normal': ['logout', 'upload [name].[format] [local address]', 'like [like/dis] [name].[format]',
                                'comment [name].[format] [comment]'],
                     'admin': ['logout', 'add_tag [name].[format] [tag]', 'delete_video [name].[format]',
-                              'fix_strike [username]'],
+                              'fix_strike [username]', 'get_strike_users'],
                     'manager': ['logout', 'approve_admin [username]', 'get_requests']}
 
 
@@ -282,32 +282,33 @@ def handle(client: socket.socket):
     while True:
         try:
             message = client.recv(1024).decode('ascii')
+            print(message)
             split_message = message.split()
             command = split_message[0]
             if (command not in login_not_need) and (not user.logged_in):
-                client.send('you need to login'.encode('ascii'))
+                client.send(pickle.dumps('you need to login'))
             elif user.logged_in and (command not in valid_commands[user.type]):
-                client.send('this command is not valid for you.'.encode('ascii'))
+                client.send(pickle.dumps('this command is not valid for you.'))
             elif command in ['login', 'logout', 'register']:
-                result = handle_user(command, split_message, user)
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(handle_user(command, split_message, user))
+                client.send(result)
             elif command == 'upload':
                 title = split_message[1]
                 if get_video_by_title(title):
-                    client.send('video title is invalid.'.encode('ascii'))
+                    client.send(pickle.dumps('video title is invalid.'))
                 elif user.username in strike_users:
-                    client.send('user is in strike list and can not upload video.'.encode('ascii'))
+                    client.send(pickle.dumps('user is in strike list and can not upload video.'))
                 else:
-                    client.send('successful'.encode('ascii'))
+                    client.send(pickle.dumps('successful'))
                     video = Video(user.username, title, user.uploaded_video_num + 1)
                     videos.append(video)
                     result = video.upload()
                     user.uploaded_video_num += 1
                     users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
-                    client.send(result.encode('ascii'))
+                    client.send(pickle.dumps(result))
             elif command == 'stream':
                 if get_video_by_title(split_message[1]):
-                    client.send('successful'.encode('ascii'))
+                    client.send(pickle.dumps('successful'))
                     filename = 'data/' + split_message[1]
                     thread2 = threading.Thread(target=stream_video, args=([filename]))
                     print(thread2.name, "def start stream")
@@ -316,44 +317,47 @@ def handle(client: socket.socket):
                     # stream_video(filename)
                     print("AFTER STREAM")
                 else:
-                    client.send('there is not video by this name.'.encode('ascii'))
+                    client.send(pickle.dumps('there is not video by this name.'))
 
             elif command == 'video_list':
-                result = get_video_list()
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(get_video_list())
+                client.send(result)
             elif command == 'like':
-                result = like_dis_video(split_message[1], split_message[2], user.username)
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(like_dis_video(split_message[1], split_message[2], user.username))
+                client.send(result)
             elif command == 'comment':
                 com = ' '.join(split_message[2:])
-                result = comment_video(split_message[1], com, user.username)
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(comment_video(split_message[1], com, user.username))
+                client.send(result)
             elif command == 'get_requests':
-                result = waiting_admins
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(waiting_admins)
+                client.send(result)
+            elif command == 'get_strike_users':
+                result = pickle.dumps(strike_users)
+                client.send(result)
             elif command == 'approve_admin':
-                result = approve_admin(split_message[1])
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(approve_admin(split_message[1]))
+                client.send(result)
             elif command == 'add_tag':
                 tag = ' '.join(split_message[2:])
-                result = add_risk_tag(split_message[1], tag)
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(add_risk_tag(split_message[1], tag))
+                client.send(result)
             elif command == 'command_list':
-                result = get_valid_commands(user)
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(get_valid_commands(user))
+                client.send(result)
             elif command == 'video_detail':
-                result = get_video_detail(split_message[1])
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(get_video_detail(split_message[1]))
+                client.send(result)
             elif command == 'delete_video':
-                result = delete_video(user, split_message[1])
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(delete_video(user, split_message[1]))
+                client.send(result)
             elif command == 'fix_strike':
-                result = fix_strike(split_message[1])
-                client.send(result.encode('ascii'))
+                result = pickle.dumps(fix_strike(split_message[1]))
+                client.send(result)
             elif command == 'quit':
                 raise socket.error
             else:
-                client.send('invalid command! enter command_list for help.'.encode('ascii'))
+                client.send(pickle.dumps('invalid command! enter command_list for help.'))
 
         except socket.error as e:
             print(e)
@@ -365,8 +369,9 @@ def handle(client: socket.socket):
                 pickle.dump(videos, f)
             client.close()
             break
-        except:
-            client.send('invalid command! enter command_list for help.'.encode('ascii'))
+        except Exception as e:
+            print(e)
+            client.send(pickle.dumps('invalid command! enter command_list for help.'))
 
 
 def video_stream_gen(vid, q):
@@ -518,7 +523,7 @@ while True:
 
     print(f"client connected with {address}")
 
-    client.send("connected".encode('ascii'))
+    client.send(pickle.dumps("connected"))
 
     threadstart = threading.Thread(target=handle, args=([client]))
     #print(threadstart.name,"thread start connection")
