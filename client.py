@@ -34,7 +34,7 @@ print("connected to server")
 
 def video_stream(stream_socket: socket.socket):
     global STREAM
-    winname = 'RECEIVING VIDEO -'+str(random.randint(1000,9999))
+    winname = 'RECEIVING VIDEO -' + str(random.randint(1000, 9999))
     print(winname)
     cv2.namedWindow(winname)
     cv2.moveWindow(winname, 10, 360)
@@ -108,7 +108,7 @@ def audio_stream():
         except:
             break
 
-    print("audio sys exit, STREAM before false: ",STREAM)
+    print("audio sys exit, STREAM before false: ", STREAM)
     STREAM = False
     sys.exit()
     # client_socket.close()
@@ -129,14 +129,24 @@ def get_stream():
 
     thread2 = threading.Thread(target=video_stream, args=([stream_socket]))
     thread2.start()
-    #thread1.join()
-    #thread2.join()
+    # thread1.join()
+    # thread2.join()
+
+
+def ping():
+    start_time = time.perf_counter()
+    client.send('ping'.encode('ascii'))
+    pong = pickle.loads(client.recv(1024))
+    if pong != 'pong':
+        print('server returned invalid response!')
+    total_time = time.perf_counter() - start_time
+    return total_time
 
 
 def echo():
     while True:
         try:
-            #message = input("enter your message:\n")
+            # message = input("enter your message:\n")
             message = input()
             command = message.split()[0]
             if command == 'upload':
@@ -163,6 +173,11 @@ def echo():
                     get_stream()
                 else:
                     print(response)
+            elif command == 'ping':
+                sum_time = 0
+                for i in range(1000):
+                    sum_time += ping()
+                print(f'avg {sum_time} ms')
             else:
                 client.send(message.encode('ascii'))
                 response = pickle.loads(client.recv(1024))
