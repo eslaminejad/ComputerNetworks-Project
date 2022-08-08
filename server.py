@@ -511,14 +511,15 @@ def stream_video(filename):
     thread5.start()
 
 
+
 try:
     users = np.load('users.npy', allow_pickle=True).item()
     strike_users = np.load('strike_users.npy')
     waiting_admins = np.load('waiting_admins.npy')
-    with open("videos.dat", "rb") as f:
+    with open("videos.dat",'rb') as f:
         videos = pickle.load(f)
-except Exception as e:
-    print(f'error in load data :{e}')
+except:
+    print('error in load data')
 
 while True:
     client, address = server.accept()

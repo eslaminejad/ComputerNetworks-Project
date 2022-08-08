@@ -139,7 +139,7 @@ def ping():
     pong = pickle.loads(client.recv(1024))
     if pong != 'pong':
         print('server returned invalid response!')
-    total_time = time.perf_counter() - start_time
+    total_time = (time.perf_counter() - start_time)*1000
     return total_time
 
 
@@ -175,9 +175,9 @@ def echo():
                     print(response)
             elif command == 'ping':
                 sum_time = 0
-                for i in range(1000):
+                for i in range(10):
                     sum_time += ping()
-                print(f'avg {sum_time} ms')
+                print(f'avg {sum_time/10} ms')
             else:
                 client.send(message.encode('ascii'))
                 response = pickle.loads(client.recv(1024))
