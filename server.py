@@ -1,3 +1,4 @@
+import atexit
 import base64
 import os
 import pickle
@@ -517,6 +518,21 @@ try:
         videos = pickle.load(f)
 except Exception as e:
     print(f'error in load data :{e}')
+
+client = None
+
+
+def exit_handler():
+    np.save('users.npy', users)
+    np.save('strike_users.npy', strike_users)
+    np.save('waiting_admins.npy', waiting_admins)
+    with open("videos.dat", "wb") as f:
+        pickle.dump(videos, f)
+    if client:
+        client.close()
+
+
+atexit.register(exit_handler)
 
 while True:
     client, address = server.accept()
