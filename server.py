@@ -132,7 +132,7 @@ class Video:
         return 'successful'
 
 
-def handle_user(command, split_message, user, ISPROXY):
+def handle_user(command, split_message, user):
     if command == 'register':
         if len(split_message) == 3:
             input_username = split_message[1]
@@ -308,8 +308,10 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 client.send(pickle.dumps('you need to login'))
             elif user.logged_in and (command not in valid_commands[user.type]):
                 client.send(pickle.dumps('this command is not valid for you.'))
+            elif user.type == 'admin' and not ISPROXY:
+                client.send(pickle.dumps('Connect to Proxy first!'))
             elif command in ['login', 'logout', 'register']:
-                result = pickle.dumps(handle_user(command, split_message, user, ISPROXY))
+                result = pickle.dumps(handle_user(command, split_message, user))
                 client.send(result)
             elif command == 'upload':
                 title = split_message[1]
@@ -352,10 +354,7 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 result = pickle.dumps(waiting_admins)
                 client.send(result)
             elif command == 'get_strike_users':
-                if ISPROXY:
-                    result = pickle.dumps(strike_users)
-                else:
-                    result = pickle.dumps('Connect to Proxy first.')
+                result = pickle.dumps(strike_users)
                 client.send(result)
 
             elif command == 'approve_admin':
