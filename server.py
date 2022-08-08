@@ -1,3 +1,4 @@
+import atexit
 import base64
 import os
 import pickle
@@ -44,7 +45,7 @@ login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', '
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
                              'comment', 'command_list', 'ping', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
-                            'fix_strike', 'get_strike_users', 'command_list', 'quit'],
+                            'fix_strike', 'get_strike_users', 'command_list', 'ping', 'quit'],
                   'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
@@ -536,6 +537,21 @@ try:
         videos = pickle.load(f)
 except:
     print('error in load data')
+
+client = None
+
+
+def exit_handler():
+    np.save('users.npy', users)
+    np.save('strike_users.npy', strike_users)
+    np.save('waiting_admins.npy', waiting_admins)
+    with open("videos.dat", "wb") as f:
+        pickle.dump(videos, f)
+    if client:
+        client.close()
+
+
+atexit.register(exit_handler)
 
 while True:
     client, address = server.accept()
