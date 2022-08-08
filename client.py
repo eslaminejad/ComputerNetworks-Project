@@ -25,12 +25,19 @@ file_port = 8551
 global STREAM
 STREAM = False
 
-# connect to webserver
-client.connect((host, port))
-message = pickle.loads(client.recv(1024))
-print(message)
-print("connected to server")
-
+server_or_proxy = input('1.connect to server\n2.connect to proxy\n')
+if server_or_proxy == '1':
+    # connect to server
+    client.connect((host, port))
+    message = pickle.loads(client.recv(1024))
+    print(message)
+    print("connected to server")
+elif server_or_proxy == '2':
+    # connect to proxy
+    client.connect((host, 7777))
+    message = client.recv(1024).decode('ascii')
+    print(message)
+    print("connected to proxy server!!!!")
 
 def video_stream(stream_socket: socket.socket):
     global STREAM
