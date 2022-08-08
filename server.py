@@ -28,7 +28,7 @@ file_server.bind((host, file_port))
 file_server.listen(2)
 print("server listening")
 
-users = {'ali': ['123', 'normal', 0, -1], 'manager': ['supreme_manager#2022', 'manager']}
+users = {'ali': ['123', 'normal', 0, -1], 'manager': ['supreme_manager#2022', 'manager', 0, -1]}
 # 3rd item is total number of uploaded video. 4th is index of last video deleted.
 waiting_admins = []
 videos = []
@@ -94,6 +94,7 @@ class User:
     def logout(self):
         if self.logged_in:
             self.logged_in = False
+            self.type = ''
             return True
         else:
             return False
@@ -121,13 +122,17 @@ class Video:
         soc, adder = file_server.accept()
         print(f'client connect to upload file {adder}')
         saveasfilename = 'data/' + self.title
+        iter = 0
         with soc, open(saveasfilename, 'wb') as file:
             received = soc.recv(4096)
-            while True:
+            while iter < 12800:
                 file.write(received)
                 received = soc.recv(4096)
                 if not received:
                     break
+                iter += 1
+        if iter == 12800:
+            return 'file size is too large.'
         print("File has been received.")
         return 'successful'
 
@@ -218,7 +223,7 @@ def approve_admin(username):
         return 'username is not valid.'
     info = users[username]
     waiting_admins.remove(username)
-    users[username] = [info[0], 'admin']
+    users[username] = [info[0], 'admin', info[2], info[3]]
     return username + ' approved as admin.'
 
 
@@ -252,7 +257,7 @@ def get_video_detail(title):
         return detail
 
 
-def delete_video(user, title):
+def delete_video(title):
     vid = get_video_by_title(title)
     if vid is None:
         return 'there is not video with this name.'
@@ -260,14 +265,15 @@ def delete_video(user, title):
     if os.path.exists('data/' + title):
         os.remove('data/' + title)
     new_deleted = vid.owner_index
-    if new_deleted == (user.last_video_deleted + 1):
-        strike_users.append(user.username)
-        user.last_video_deleted = -1
+    use = users[vid.owner]
+    if abs(new_deleted - use[3]) == 1:
+        strike_users.append(vid.owner)
+        use[3] = -1
         message = 'user added to strike list.'
     else:
-        user.last_video_deleted = new_deleted
+        use[3] = new_deleted
         message = 'video deleted.'
-    users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
+    users[vid.owner] = use
     return message
 
 
@@ -277,8 +283,12 @@ def fix_strike(username):
     strike_users.remove(username)
     return 'successful'
 
+
 global last_req
 last_req = {}
+REQ_GAP = 0.5
+
+
 def handle(client: socket.socket, addr, ISPROXY: bool):
     #TODO
     # ADMIN SHOULD have 'ISPORXY'==TRUE  to access commands
@@ -294,13 +304,11 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 last_req[addr] = time.perf_counter()
             else:
                 new_req = time.perf_counter()
-                if new_req - last_req[addr] < 0.5:
+                if new_req - last_req[addr] < REQ_GAP:
                     client.close()
-                    pass
+                    break
                 last_req[addr] = new_req
 
-
-            #
             print(message)
             split_message = message.split()
             command = split_message[0]
@@ -308,11 +316,11 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 client.send(pickle.dumps('you need to login'))
             elif user.logged_in and (command not in valid_commands[user.type]):
                 client.send(pickle.dumps('this command is not valid for you.'))
-            elif user.type == 'admin' and not ISPROXY:
-                client.send(pickle.dumps('Connect to Proxy first!'))
             elif command in ['login', 'logout', 'register']:
                 result = pickle.dumps(handle_user(command, split_message, user))
                 client.send(result)
+            elif user.type == 'admin' and not ISPROXY:
+                client.send(pickle.dumps('Connect to Proxy first!'))
             elif command == 'upload':
                 title = split_message[1]
                 if get_video_by_title(title):
@@ -322,10 +330,14 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 else:
                     client.send(pickle.dumps('successful'))
                     video = Video(user.username, title, user.uploaded_video_num + 1)
-                    videos.append(video)
                     result = video.upload()
-                    user.uploaded_video_num += 1
-                    users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
+                    if result == 'successful':
+                        videos.append(video)
+                        user.uploaded_video_num += 1
+                        users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
+                    else:
+                        if os.path.exists('data/' + title):
+                            os.remove('data/' + title)
                     client.send(pickle.dumps(result))
             elif command == 'stream':
                 if get_video_by_title(split_message[1]):
@@ -371,7 +383,7 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 result = pickle.dumps(get_video_detail(split_message[1]))
                 client.send(result)
             elif command == 'delete_video':
-                result = pickle.dumps(delete_video(user, split_message[1]))
+                result = pickle.dumps(delete_video(split_message[1]))
                 client.send(result)
             elif command == 'fix_strike':
                 result = pickle.dumps(fix_strike(split_message[1]))
@@ -386,9 +398,12 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
         except socket.error as e:
             print(e)
             print("err sv handle")
-            np.save('users.npy', users)
-            np.save('strike_users.npy', strike_users)
-            np.save('waiting_admins.npy', waiting_admins)
+            with open("users.pkl", "wb") as fp:
+                pickle.dump(users, fp)
+            with open("strike_users.pkl", "wb") as fp:
+                pickle.dump(strike_users, fp)
+            with open("waiting_admins.pkl", "wb") as fp:
+                pickle.dump(waiting_admins, fp)
             with open("videos.dat", "wb") as f:
                 pickle.dump(videos, f)
             client.close()
@@ -533,13 +548,18 @@ def stream_video(filename):
     thread5.start()
 
 
-
 try:
-    users = np.load('users.npy', allow_pickle=True).item()
-    strike_users = np.load('strike_users.npy')
-    waiting_admins = np.load('waiting_admins.npy')
-    with open("videos.dat",'rb') as f:
-        videos = pickle.load(f)
+    with open("users.pkl", "rb") as fp:
+        users = pickle.load(fp)
+    with open("strike_users.pkl", "rb") as fp:
+        strike_users = pickle.load(fp)
+    with open("waiting_admins.pkl", "rb") as fp:
+        waiting_admins = pickle.load(fp)
+    # users = np.load('users.npy', allow_pickle=True).item()
+    # strike_users = np.load('strike_users.npy')
+    # waiting_admins = np.load('waiting_admins.npy')
+    with open("videos.dat", 'rb') as fp:
+        videos = pickle.load(fp)
 except:
     print('error in load data')
 
@@ -547,9 +567,12 @@ client = None
 
 
 def exit_handler():
-    np.save('users.npy', users)
-    np.save('strike_users.npy', strike_users)
-    np.save('waiting_admins.npy', waiting_admins)
+    with open("users.pkl", "wb") as fp:
+        pickle.dump(users, fp)
+    with open("strike_users.pkl", "wb") as fp:
+        pickle.dump(strike_users, fp)
+    with open("waiting_admins.pkl", "wb") as fp:
+        pickle.dump(waiting_admins, fp)
     with open("videos.dat", "wb") as f:
         pickle.dump(videos, f)
     if client:
