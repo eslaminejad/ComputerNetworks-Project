@@ -39,6 +39,7 @@ def handle(client : socket.socket, ipaddress, port):
     print(iptable[ipaddress])
     # connect to proxyserver
     server.connect((host, port))
+    server.send('proxy'.encode('ascii'))
     message = pickle.loads(server.recv(1024))
     print(message)
     print("connected")

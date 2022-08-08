@@ -29,6 +29,7 @@ server_or_proxy = input('1.connect to server\n2.connect to proxy\n')
 if server_or_proxy == '1':
     # connect to server
     client.connect((host, port))
+    client.send('hi im client'.encode('ascii'))
     message = pickle.loads(client.recv(1024))
     print(message)
     print("connected to server")

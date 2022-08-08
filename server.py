@@ -132,7 +132,7 @@ class Video:
         return 'successful'
 
 
-def handle_user(command, split_message, user):
+def handle_user(command, split_message, user, ISPROXY):
     if command == 'register':
         if len(split_message) == 3:
             input_username = split_message[1]
@@ -279,7 +279,9 @@ def fix_strike(username):
 
 global last_req
 last_req = {}
-def handle(client: socket.socket, addr):
+def handle(client: socket.socket, addr, ISPROXY: bool):
+    #TODO
+    # ADMIN SHOULD have 'ISPORXY'==TRUE  to access commands
     user = User()
     while True:
         try:
@@ -307,7 +309,7 @@ def handle(client: socket.socket, addr):
             elif user.logged_in and (command not in valid_commands[user.type]):
                 client.send(pickle.dumps('this command is not valid for you.'))
             elif command in ['login', 'logout', 'register']:
-                result = pickle.dumps(handle_user(command, split_message, user))
+                result = pickle.dumps(handle_user(command, split_message, user, ISPROXY))
                 client.send(result)
             elif command == 'upload':
                 title = split_message[1]
@@ -350,8 +352,12 @@ def handle(client: socket.socket, addr):
                 result = pickle.dumps(waiting_admins)
                 client.send(result)
             elif command == 'get_strike_users':
-                result = pickle.dumps(strike_users)
+                if ISPROXY:
+                    result = pickle.dumps(strike_users)
+                else:
+                    result = pickle.dumps('Connect to Proxy first.')
                 client.send(result)
+
             elif command == 'approve_admin':
                 result = pickle.dumps(approve_admin(split_message[1]))
                 client.send(result)
@@ -557,9 +563,13 @@ while True:
     client, address = server.accept()
 
     print(f"client connected with {address}")
-
+    message = client.recv(1024).decode('ascii')
+    print(message)
+    ISPROXY = False
+    if message == 'proxy':
+        ISPROXY = True
     client.send(pickle.dumps("connected"))
 
-    threadstart = threading.Thread(target=handle, args=([client, str(address[0])+':'+str(address[1])]))
+    threadstart = threading.Thread(target=handle, args=([client, str(address[0])+':'+str(address[1]), ISPROXY]))
     # print(threadstart.name,"thread start connection")
     threadstart.start()
