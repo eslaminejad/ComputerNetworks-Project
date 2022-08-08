@@ -1,8 +1,8 @@
 import base64
 import os
 import pickle
-import pyaudio
 import queue
+import socket
 import struct
 import sys
 import threading
@@ -12,10 +12,9 @@ import wave
 import cv2
 import imutils
 import numpy as np
-import socket
+import pyaudio
 
 BUFF_SIZE = 65536
-
 
 host = '127.0.0.1'
 port = 8550
@@ -34,7 +33,6 @@ waiting_admins = []
 videos = []
 strike_users = []
 
-
 global STREAM
 STREAM = False
 
@@ -42,15 +40,16 @@ stream_port = 9688
 stream_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 stream_socket.bind((host, stream_port))
 
-login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit']
+login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit', 'ping']
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
-                             ' comment', 'command_list', 'quit'],
+                             ' comment', 'command_list', 'ping', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
                             'fix_strike', 'get_strike_users', 'command_list', 'quit'],
-                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'quit']}
+                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
-                  'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list', 'quit']
+                  'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list', 'ping',
+                  'quit']
 special_commands = {'normal': ['logout', 'upload [name].[format] [local address]', 'like [like/dis] [name].[format]',
                                'comment [name].[format] [comment]'],
                     'admin': ['logout', 'add_tag [name].[format] [tag]', 'delete_video [name].[format]',
@@ -99,7 +98,7 @@ class User:
             return False
 
 
-class Video():
+class Video:
     title: str
     owner: str
     likes: list
@@ -258,7 +257,6 @@ def delete_video(user, title):
     if os.path.exists('data/' + title):
         os.remove('data/' + title)
     new_deleted = vid.owner_index
-    message = ''
     if new_deleted == (user.last_video_deleted + 1):
         strike_users.append(user.username)
         user.last_video_deleted = -1
@@ -313,7 +311,7 @@ def handle(client: socket.socket):
                     thread2 = threading.Thread(target=stream_video, args=([filename]))
                     print(thread2.name, "def start stream")
                     thread2.start()
-                    #thread2.join()
+                    # thread2.join()
                     # stream_video(filename)
                     print("AFTER STREAM")
                 else:
@@ -356,6 +354,8 @@ def handle(client: socket.socket):
                 client.send(result)
             elif command == 'quit':
                 raise socket.error
+            elif command == 'ping':
+                client.send(pickle.dumps('pong'))
             else:
                 client.send(pickle.dumps('invalid command! enter command_list for help.'))
 
@@ -386,10 +386,10 @@ def video_stream_gen(vid, q):
             print("except video gen")
             for thread in threading.enumerate():
                 print(thread.name)
-            print(threading.currentThread().name,"*")
+            print(threading.currentThread().name, "*")
             break
             # os._exit(1)
-    print('Player closed,stream before false: ',STREAM)
+    print('Player closed,stream before false: ', STREAM)
     BREAK = True
     vid.release()
     STREAM = False
@@ -401,8 +401,8 @@ def video_stream(q, FPS):
     global TS
     global STREAM
     fps, st, frames_to_count, cnt = (0, 0, 1, 0)
-    #cv2.namedWindow('TRANSMITTING VIDEO')
-    #cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
+    # cv2.namedWindow('TRANSMITTING VIDEO')
+    # cv2.moveWindow('TRANSMITTING VIDEO', 10, 30)
     while True:
         msg, client_addr = stream_socket.recvfrom(BUFF_SIZE)
         print('GOT connection from ', client_addr)
@@ -431,7 +431,7 @@ def video_stream(q, FPS):
                     pass
             cnt += 1
 
-            #cv2.imshow('TRANSMITTING VIDEO', frame)
+            # cv2.imshow('TRANSMITTING VIDEO', frame)
             key = cv2.waitKey(int(1000 * TS)) & 0xFF
             if key == ord('q'):
                 print("video os exit")
@@ -446,7 +446,7 @@ def video_stream(q, FPS):
     sys.exit()
 
 
-def audio_stream(filename :str):
+def audio_stream(filename: str):
     s = socket.socket()
     s.bind((host, (stream_port - 1)))
 
@@ -497,28 +497,28 @@ def stream_video(filename):
     print(durationInSeconds, d)
 
     thread3 = threading.Thread(target=audio_stream, args=([filename]))
-    print(thread3.name,"audio_stream")
+    print(thread3.name, "audio_stream")
     thread3.start()
 
     thread4 = threading.Thread(target=video_stream_gen, args=([vid, q]))
-    print(thread4.name,"video_stream_gen")
+    print(thread4.name, "video_stream_gen")
     thread4.start()
 
     thread5 = threading.Thread(target=video_stream, args=([q, FPS]))
-    print(thread5.name,"video_stream")
+    print(thread5.name, "video_stream")
     thread5.start()
 
 
-while True:
-    try:
-        users = np.load('users.npy', allow_pickle=True).item()
-        strike_users = np.load('strike_users.npy')
-        waiting_admins = np.load('waiting_admins.npy')
-        with open("videos.dat") as f:
-            videos = pickle.load(f)
-    except:
-        print('error in load data')
+try:
+    users = np.load('users.npy', allow_pickle=True).item()
+    strike_users = np.load('strike_users.npy')
+    waiting_admins = np.load('waiting_admins.npy')
+    with open("videos.dat", "rb") as f:
+        videos = pickle.load(f)
+except Exception as e:
+    print(f'error in load data :{e}')
 
+while True:
     client, address = server.accept()
 
     print(f"client connected with {address}")
@@ -526,5 +526,5 @@ while True:
     client.send(pickle.dumps("connected"))
 
     threadstart = threading.Thread(target=handle, args=([client]))
-    #print(threadstart.name,"thread start connection")
+    # print(threadstart.name,"thread start connection")
     threadstart.start()
