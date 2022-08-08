@@ -1,8 +1,8 @@
 import base64
 import os
 import pickle
+import pyaudio
 import random
-import socket
 import struct
 import sys
 import threading
@@ -10,7 +10,7 @@ import time
 
 import cv2
 import numpy as np
-import pyaudio
+import socket
 
 BUFF_SIZE = 65536
 
@@ -139,7 +139,7 @@ def ping():
     pong = pickle.loads(client.recv(1024))
     if pong != 'pong':
         print('server returned invalid response!')
-    total_time = time.perf_counter() - start_time
+    total_time = (time.perf_counter() - start_time)*1000
     return total_time
 
 
@@ -151,18 +151,21 @@ def echo():
             command = message.split()[0]
             if command == 'upload':
                 filename = message.split()[2]
-                client.send(('upload ' + message.split()[1]).encode('ascii'))
-                response = pickle.loads(client.recv(1024))
-                if response == 'successful':
-                    file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    file_client.connect((host, file_port))
-                    with file_client, open(filename, 'rb') as file:
-                        sendfile = file.read()
-                        file_client.sendall(sendfile)
-                    new_response = pickle.loads(client.recv(1024))
-                    print(new_response)
+                if not os.path.exists(filename):
+                    print('No such file with this address')
                 else:
-                    print(response)
+                    client.send(('upload ' + message.split()[1]).encode('ascii'))
+                    response = pickle.loads(client.recv(1024))
+                    if response == 'successful':
+                        file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        file_client.connect((host, file_port))
+                        with file_client, open(filename, 'rb') as file:
+                            sendfile = file.read()
+                            file_client.sendall(sendfile)
+                        new_response = pickle.loads(client.recv(1024))
+                        print(new_response)
+                    else:
+                        print(response)
             elif command == 'stream':
                 client.send(message.encode('ascii'))
                 response = pickle.loads(client.recv(1024))
@@ -172,9 +175,9 @@ def echo():
                     print(response)
             elif command == 'ping':
                 sum_time = 0
-                for i in range(1000):
+                for i in range(10):
                     sum_time += ping()
-                print(f'avg {sum_time} ms')
+                print(f'avg {sum_time/10} ms')
             else:
                 client.send(message.encode('ascii'))
                 response = pickle.loads(client.recv(1024))
@@ -186,6 +189,8 @@ def echo():
             print("socket error")
             client.close()
             break
+        except Exception as e:
+            print(e)
 
 
 def read():

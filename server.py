@@ -43,9 +43,9 @@ stream_socket.bind((host, stream_port))
 
 login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit', 'ping']
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
-                             ' comment', 'command_list', 'ping', 'quit'],
+                             'comment', 'command_list', 'ping', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
-                            'fix_strike', 'get_strike_users', 'command_list', 'quit'],
+                            'fix_strike', 'get_strike_users', 'command_list', 'ping', 'quit'],
                   'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
@@ -233,6 +233,8 @@ def add_risk_tag(video_title, tag):
 def get_valid_commands(user):
     commands = usual_commands
     if user.type != '':
+        commands.pop(0)
+        commands.pop(0)
         commands += special_commands[user.type]
     return commands
 
@@ -510,14 +512,15 @@ def stream_video(filename):
     thread5.start()
 
 
+
 try:
     users = np.load('users.npy', allow_pickle=True).item()
     strike_users = np.load('strike_users.npy')
     waiting_admins = np.load('waiting_admins.npy')
-    with open("videos.dat", "rb") as f:
+    with open("videos.dat",'rb') as f:
         videos = pickle.load(f)
-except Exception as e:
-    print(f'error in load data :{e}')
+except:
+    print('error in load data')
 
 client = None
 
