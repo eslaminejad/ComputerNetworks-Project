@@ -3,6 +3,7 @@ import base64
 import os
 import pickle
 import queue
+import random
 import socket
 import struct
 import sys
@@ -12,7 +13,6 @@ import wave
 
 import cv2
 import imutils
-import numpy as np
 import pyaudio
 
 BUFF_SIZE = 65536
@@ -33,6 +33,7 @@ users = {'ali': ['123', 'normal', 0, -1], 'manager': ['supreme_manager#2022', 'm
 waiting_admins = []
 videos = []
 strike_users = []
+tickets = []
 
 global STREAM
 STREAM = False
@@ -43,10 +44,12 @@ stream_socket.bind((host, stream_port))
 
 login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit', 'ping']
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
-                             'comment', 'command_list', 'ping', 'quit'],
+                             'comment', 'command_list', 'ping', 'add_ticket', 'ticket_details', 'my_tickets', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
-                            'fix_strike', 'get_strike_users', 'command_list', 'ping', 'quit'],
-                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'quit']}
+                            'fix_strike', 'get_strike_users', 'command_list', 'ping', 'add_ticket', 'ticket_details',
+                            'my_tickets', 'get_tickets', 'change_ticket_status', 'add_ticket_response', 'quit'],
+                  'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'ticket_details',
+                              'get_tickets', 'change_ticket_status', 'add_ticket_response', 'quit']}
 
 usual_commands = ['register [username] [password] [optional:admin]', 'login [username] [password]',
                   'stream [name].[format]', 'video_list', 'video_detail [name].[format]', 'command_list', 'ping',
@@ -54,7 +57,8 @@ usual_commands = ['register [username] [password] [optional:admin]', 'login [use
 special_commands = {'normal': ['logout', 'upload [name].[format] [local address]', 'like [like/dis] [name].[format]',
                                'comment [name].[format] [comment]'],
                     'admin': ['logout', 'add_tag [name].[format] [tag]', 'delete_video [name].[format]',
-                              'fix_strike [username]', 'get_strike_users'],
+                              'fix_strike [username]', 'get_strike_users',
+                              'change_ticket [id] [new/in_progress/done]'],
                     'manager': ['logout', 'approve_admin [username]', 'get_requests']}
 
 
@@ -98,6 +102,33 @@ class User:
             return True
         else:
             return False
+
+
+class Ticket:
+    class Status:
+        New = 'new'
+        InProgress = 'in_progress'
+        Done = 'done'
+        Closed = 'closed'
+
+    StatusList = [Status.New, Status.InProgress, Status.Done]
+
+    def __init__(self, owner, text, type):
+        self.type = type
+        self.owner = owner
+        self.text = text
+        self.id = random.randint(10 ** 3, 10 ** 4)
+        self.status = self.Status.New
+        self.response = None
+
+    def represent(self):
+        return dict(
+            id=self.id,
+            status=self.status,
+            owner=self.owner,
+            text=self.text,
+            response=self.response
+        )
 
 
 class Video:
@@ -284,19 +315,62 @@ def fix_strike(username):
     return 'successful'
 
 
+def add_ticket(user, text):
+    tickets.append(Ticket(owner=user.username, text=text, type=user.type))
+    return 'ticket added successfully'
+
+
+def get_my_tickets(user):
+    return [ticket.represent() for ticket in filter(lambda x: x.owner == user.username, tickets)]
+
+
+def get_tickets(user):
+    expected_type = 'normal' if user.type == 'admin' else 'admin'
+    return [(ticket.id, ticket.status) for ticket in filter(lambda x: x.type == expected_type, tickets)]
+
+
+def get_ticket_details(id):
+    for ticket in tickets:
+        if ticket.id == id:
+            return ticket.represent()
+    return 'ticket not found'
+
+
+def add_response(id, text):
+    found_ticket = None
+    for ticket in tickets:
+        if ticket.id == id:
+            found_ticket = ticket
+    if not found_ticket:
+        return 'ticket not found'
+    if found_ticket.status == Ticket.Status.Closed:
+        return 'this ticket has been closed'
+    found_ticket.response = text
+    return 'ticket response added successfully'
+
+
+def change_ticket_status(id, status):
+    if status not in Ticket.StatusList:
+        return 'not a valid status'
+    for ticket in tickets:
+        if ticket.id == id:
+            ticket.status = status
+    return 'ticket status changed successfully'
+
+
 global last_req
 last_req = {}
 REQ_GAP = 0.5
 
 
 def handle(client: socket.socket, addr, ISPROXY: bool):
-    #TODO
+    # TODO
     # ADMIN SHOULD have 'ISPORXY'==TRUE  to access commands
     user = User()
     while True:
         try:
             message = client.recv(1024).decode('ascii')
-            #print(addr)
+            # print(addr)
 
             # Handling DDOS
             global last_req
@@ -334,7 +408,8 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                     if result == 'successful':
                         videos.append(video)
                         user.uploaded_video_num += 1
-                        users[user.username] = [user.password, user.type, user.uploaded_video_num, user.last_video_deleted]
+                        users[user.username] = [user.password, user.type, user.uploaded_video_num,
+                                                user.last_video_deleted]
                     else:
                         if os.path.exists('data/' + title):
                             os.remove('data/' + title)
@@ -392,6 +467,24 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 raise socket.error
             elif command == 'ping':
                 client.send(pickle.dumps('pong'))
+            elif command == 'add_ticket':
+                result = add_ticket(user, ' '.join(split_message[1:]))
+                client.send(pickle.dumps(result))
+            elif command == 'ticket_details':
+                result = get_ticket_details(int(split_message[1]))
+                client.send(pickle.dumps(result))
+            elif command == 'my_tickets':
+                result = get_my_tickets(user)
+                client.send(pickle.dumps(result))
+            elif command == 'get_tickets':
+                result = get_tickets(user)
+                client.send(pickle.dumps(result))
+            elif command == 'change_ticket_status':
+                result = change_ticket_status(int(split_message[1]), split_message[2])
+                client.send(pickle.dumps(result))
+            elif command == 'add_ticket_response':
+                result = add_response(int(split_message[1]), split_message[2])
+                client.send(pickle.dumps(result))
             else:
                 client.send(pickle.dumps('invalid command! enter command_list for help.'))
 
@@ -560,6 +653,8 @@ try:
     # waiting_admins = np.load('waiting_admins.npy')
     with open("videos.dat", 'rb') as fp:
         videos = pickle.load(fp)
+    with open("tickets.dat", 'rb') as f:
+        tickets = pickle.load(f)
 except:
     print('error in load data')
 
@@ -575,6 +670,8 @@ def exit_handler():
         pickle.dump(waiting_admins, fp)
     with open("videos.dat", "wb") as f:
         pickle.dump(videos, f)
+    with open("tickets.dat", "wb") as f:
+        pickle.dump(tickets, f)
     if client:
         client.close()
 
@@ -592,6 +689,6 @@ while True:
         ISPROXY = True
     client.send(pickle.dumps("connected"))
 
-    threadstart = threading.Thread(target=handle, args=([client, str(address[0])+':'+str(address[1]), ISPROXY]))
+    threadstart = threading.Thread(target=handle, args=([client, str(address[0]) + ':' + str(address[1]), ISPROXY]))
     # print(threadstart.name,"thread start connection")
     threadstart.start()
