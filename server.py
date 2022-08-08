@@ -111,7 +111,7 @@ class Ticket:
         Done = 'done'
         Closed = 'closed'
 
-    StatusList = [Status.New, Status.InProgress, Status.Done]
+    StatusList = [Status.New, Status.InProgress, Status.Done, Status.Closed]
 
     def __init__(self, owner, text, type):
         self.type = type
@@ -483,7 +483,7 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 result = change_ticket_status(int(split_message[1]), split_message[2])
                 client.send(pickle.dumps(result))
             elif command == 'add_ticket_response':
-                result = add_response(int(split_message[1]), split_message[2])
+                result = add_response(int(split_message[1]), ' '.join(split_message[2:]))
                 client.send(pickle.dumps(result))
             else:
                 client.send(pickle.dumps('invalid command! enter command_list for help.'))
@@ -499,6 +499,8 @@ def handle(client: socket.socket, addr, ISPROXY: bool):
                 pickle.dump(waiting_admins, fp)
             with open("videos.dat", "wb") as f:
                 pickle.dump(videos, f)
+            with open("tickets.dat", "wb") as f:
+                pickle.dump(tickets, f)
             client.close()
             break
         except Exception as e:
@@ -648,9 +650,6 @@ try:
         strike_users = pickle.load(fp)
     with open("waiting_admins.pkl", "rb") as fp:
         waiting_admins = pickle.load(fp)
-    # users = np.load('users.npy', allow_pickle=True).item()
-    # strike_users = np.load('strike_users.npy')
-    # waiting_admins = np.load('waiting_admins.npy')
     with open("videos.dat", 'rb') as fp:
         videos = pickle.load(fp)
     with open("tickets.dat", 'rb') as f:
