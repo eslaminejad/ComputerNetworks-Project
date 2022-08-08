@@ -1,12 +1,16 @@
-import random
-import socket, threading
-import sys
-
-import cv2, imutils, socket
-import numpy as np
-import time, os
 import base64
-import threading, wave, pyaudio,pickle,struct
+import os
+import pickle
+import pyaudio
+import random
+import struct
+import sys
+import threading
+import time
+
+import cv2
+import numpy as np
+import socket
 
 BUFF_SIZE = 65536
 
@@ -65,7 +69,6 @@ def video_stream(stream_socket: socket.socket):
     cv2.destroyWindow(winname)
     stream_socket.close()
     sys.exit()
-
 
 
 def audio_stream():
@@ -138,18 +141,21 @@ def echo():
             command = message.split()[0]
             if command == 'upload':
                 filename = message.split()[2]
-                client.send(('upload ' + message.split()[1]).encode('ascii'))
-                response = pickle.loads(client.recv(1024))
-                if response == 'successful':
-                    file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    file_client.connect((host, file_port))
-                    with file_client, open(filename, 'rb') as file:
-                        sendfile = file.read()
-                        file_client.sendall(sendfile)
-                    new_response = pickle.loads(client.recv(1024))
-                    print(new_response)
+                if not os.path.exists(filename):
+                    print('No such file with this address')
                 else:
-                    print(response)
+                    client.send(('upload ' + message.split()[1]).encode('ascii'))
+                    response = pickle.loads(client.recv(1024))
+                    if response == 'successful':
+                        file_client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        file_client.connect((host, file_port))
+                        with file_client, open(filename, 'rb') as file:
+                            sendfile = file.read()
+                            file_client.sendall(sendfile)
+                        new_response = pickle.loads(client.recv(1024))
+                        print(new_response)
+                    else:
+                        print(response)
             elif command == 'stream':
                 client.send(message.encode('ascii'))
                 response = pickle.loads(client.recv(1024))
@@ -168,6 +174,8 @@ def echo():
             print("socket error")
             client.close()
             break
+        except Exception as e:
+            print(e)
 
 
 def read():

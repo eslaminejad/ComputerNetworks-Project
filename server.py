@@ -233,6 +233,8 @@ def add_risk_tag(video_title, tag):
 def get_valid_commands(user):
     commands = usual_commands
     if user.type != '':
+        commands.pop(0)
+        commands.pop(0)
         commands += special_commands[user.type]
     return commands
 
