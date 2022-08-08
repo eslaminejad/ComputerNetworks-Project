@@ -42,7 +42,7 @@ stream_socket.bind((host, stream_port))
 
 login_not_need = ['register', 'login', 'stream', 'video_list', 'video_detail', 'command_list', 'quit', 'ping']
 valid_commands = {'normal': ['logout', 'stream', 'video_list', 'video_detail', 'upload', 'like',
-                             ' comment', 'command_list', 'ping', 'quit'],
+                             'comment', 'command_list', 'ping', 'quit'],
                   'admin': ['logout', 'add_tag', 'video_list', 'video_detail', 'stream', 'delete_video',
                             'fix_strike', 'get_strike_users', 'command_list', 'quit'],
                   'manager': ['logout', 'approve_admin', 'get_requests', 'command_list', 'ping', 'quit']}
@@ -276,12 +276,27 @@ def fix_strike(username):
     strike_users.remove(username)
     return 'successful'
 
-
-def handle(client: socket.socket):
+global last_req
+last_req = {}
+def handle(client: socket.socket, addr):
     user = User()
     while True:
         try:
             message = client.recv(1024).decode('ascii')
+            #print(addr)
+
+            # Handling DDOS
+            global last_req
+            if addr not in last_req:
+                last_req[addr] = time.perf_counter()
+            else:
+                new_req = time.perf_counter()
+                if new_req - last_req[addr] < 0.5:
+                    client.close()
+                last_req[addr] = new_req
+
+
+            #
             print(message)
             split_message = message.split()
             command = split_message[0]
@@ -528,6 +543,6 @@ while True:
 
     client.send(pickle.dumps("connected"))
 
-    threadstart = threading.Thread(target=handle, args=([client]))
+    threadstart = threading.Thread(target=handle, args=([client, str(address[0])+':'+str(address[1])]))
     # print(threadstart.name,"thread start connection")
     threadstart.start()

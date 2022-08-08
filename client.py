@@ -175,9 +175,12 @@ def echo():
                     print(response)
             elif command == 'ping':
                 sum_time = 0
-                for i in range(10):
-                    sum_time += ping()
-                print(f'avg {sum_time/10} ms')
+                for i in range(4):
+                    new_ping = ping()
+                    sum_time += new_ping
+                    print(f"ping = {new_ping}")
+                    time.sleep(0.51)
+                print(f'avg {sum_time/4} ms')
             else:
                 client.send(message.encode('ascii'))
                 response = pickle.loads(client.recv(1024))
