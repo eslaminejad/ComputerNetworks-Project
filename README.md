@@ -5,17 +5,23 @@
 ### install requirements
 
 ```angular2html
-pip install -r requirements.txt
+sudo apt install portaudio19-dev python3-pyaudio
 ```
 
-### create your database
+then
 
 ```angular2html
-python server/manage.py migrate
+pip install -r requirements.txt
 ```
 
 ### run your server
 
 ```angular2html
-python server/manage.py runserver
+python server.py
+```
+
+### run your client
+
+```angular2html
+python client.py
 ```
