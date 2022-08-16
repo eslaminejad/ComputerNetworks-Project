@@ -1,27 +1,14 @@
-# CN-Project
+# Computer-Network course Project
 
-## to start project
+-this is a video sharing and streaming platform.
+-created by python socket-programming
 
-### install requirements
+-to start server, first run 'server.py' and 'proxyserver.py'
+then start client by running 'client.py'
 
-```angular2html
-sudo apt install portaudio19-dev python3-pyaudio
-```
+-now you can register or login, for example:
+'register name pass'
+or
+'login name pass'
 
-then
-
-```angular2html
-pip install -r requirements.txt
-```
-
-### run your server
-
-```angular2html
-python server.py
-```
-
-### run your client
-
-```angular2html
-python client.py
-```
+-use command 'command_list' to see all commands('upload','stream','like','comment',...)
